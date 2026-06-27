@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, Redirect } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAuth } from "@/src/auth-context";
 import { useI18n } from "@/src/i18n";
@@ -43,6 +44,16 @@ function AdminPanel() {
   const [scanning, setScanning] = useState(false);
   const [permissionRequested, setPermissionRequested] = useState(false);
   const lastScanRef = useRef<{ data: string; at: number } | null>(null);
+  // Camera-session gating to fix the "black preview on first open" bug:
+  //  - isFocused: only mount the camera when this screen is actually focused
+  //  - camMountReady: wait out the route fade transition before mounting the
+  //    native CameraView (mounting mid-transition yields a black surface)
+  //  - cameraReady: onCameraReady fired → hide the loading spinner
+  //  - camKey: bump to force a brand-new camera session each scan cycle
+  const isFocused = useIsFocused();
+  const [camMountReady, setCamMountReady] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [camKey, setCamKey] = useState(0);
 
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
@@ -98,6 +109,25 @@ function AdminPanel() {
     // requestPermission from useCameraPermissions is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, customer, permission?.granted, permission?.canAskAgain, permissionRequested]);
+
+  // Mount the native CameraView only AFTER the screen is focused and the route
+  // fade transition has settled. Mounting it synchronously on first render (or
+  // mid-transition) is what produced the black preview that only recovered
+  // after navigating away and back. We also bump `camKey` so every scan cycle
+  // gets a fresh camera session, and reset readiness when scanning stops.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (scanning && isFocused && permission?.granted && !customer) {
+      setCameraReady(false);
+      const id = setTimeout(() => {
+        setCamKey((k) => k + 1);
+        setCamMountReady(true);
+      }, 350);
+      return () => clearTimeout(id);
+    }
+    setCamMountReady(false);
+    setCameraReady(false);
+  }, [scanning, isFocused, permission?.granted, customer]);
 
   const submitLogin = async () => {
     setAuthErr(null);
@@ -281,16 +311,26 @@ function AdminPanel() {
               {isLoyaltyApp() && (
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
-                  {scanning && Platform.OS !== "web" && permission?.granted ? (
+                  {scanning && Platform.OS !== "web" && permission?.granted && isFocused ? (
                 <View style={styles.cameraWrap}>
-                  <CameraView
-                    style={StyleSheet.absoluteFillObject}
-                    facing="back"
-                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                    onBarcodeScanned={handleBarcode}
-                  />
-                  <View style={styles.scanFrame} />
-                  <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>
+                  {camMountReady && (
+                    <CameraView
+                      key={camKey}
+                      style={StyleSheet.absoluteFillObject}
+                      facing="back"
+                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                      onBarcodeScanned={handleBarcode}
+                      onCameraReady={() => setCameraReady(true)}
+                    />
+                  )}
+                  {!cameraReady && (
+                    <View style={styles.cameraLoading} pointerEvents="none">
+                      <ActivityIndicator color={theme.color.brand} />
+                      <Text style={styles.cameraLoadingTxt}>{lang === "fr" ? "Initialisation de la caméra…" : "Starting camera…"}</Text>
+                    </View>
+                  )}
+                  {cameraReady && <View style={styles.scanFrame} />}
+                  {cameraReady && <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>}
                   <Pressable testID="stop-scan-btn" onPress={() => setScanning(false)} style={styles.stopScanBtn}>
                     <Feather name="x" size={18} color={theme.color.onBrandPrimary} />
                   </Pressable>
@@ -633,6 +673,8 @@ const styles = StyleSheet.create({
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
   stopScanBtn: { position: "absolute", top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
+  cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },
+  cameraLoadingTxt: { color: theme.color.muted, fontSize: 12, fontWeight: "500" },
   fallbackToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: theme.space.lg, marginBottom: theme.space.sm },
   fallbackToggleTxt: { color: theme.color.muted, fontSize: 13, fontWeight: "500", textDecorationLine: "underline" },
   customerHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: theme.space.lg },

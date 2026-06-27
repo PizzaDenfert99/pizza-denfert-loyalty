@@ -1,0 +1,33 @@
+{
+  "summary": "Regression run after camera black-screen-on-first-open fix in /app/frontend/app/admin.tsx. Backend: 14/14 pytest cases PASS (100%) — health, admin login, OTP demo mode, OTP verify, public menu, admin menu CRUD + 401, admin QR scan (valid+invalid), add-pizza, redeem coffee, dashboard stats, public ads slides, admin ad slide CRUD, admin search by phone and by name. Frontend (web @1024x768): admin login (admin@pizzadenfert.fr/Admin1234!) renders admin-panel; web correctly displays 'Le scanner caméra n'est disponible que sur l'app mobile' notice (this is intentional and NOT the bug — expo-camera is native-only); 'toggle-manual-search' is hidden by default and tapping it reveals 'search-input' (search-btn present); quick-action grid (Réservations, Menu, Paramètres, Statistiques, Personnel, Publicités, Mode Kiosque) all rendered. Code review of admin.tsx confirms all 5 camera-fix elements are present and well-structured: (1) useIsFocused gating mounts CameraView only when screen is focused; (2) 350 ms camMountReady delay defers CameraView mount until after the route fade-transition; (3) key={camKey} bumped on every scan cycle forces a fresh native camera session; (4) onCameraReady drives a spinner 'Initialisation de la caméra…' until preview is live; (5) clear-customer-btn re-arms scanning when permission granted. The fix targets the documented root cause (CameraView mounting mid route fade-transition + stale single session across scans) and the gating logic is correct. NOTE: actual native preview behaviour cannot be observed on Expo web preview — it must be validated on device by main agent or a manual run on iOS/Android. No JS errors, no red screen, no crashes on the admin route. Manual-search fallback + customer card + add-pizza + clear → ready cycle confirmed via backend tests (admin /search returns the customer, /admin/customer/add-pizza increments and updates rewards, /admin/customer/redeem clears available reward, returning customer payload that the UI consumes).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "RN style deprecation", "issue": "Console still emits '\"textShadow*\" style props are deprecated. Use \"textShadow\".' on admin route load. Non-blocking. Reference: app-wide style usage."},
+      {"component": "expo-notifications on web", "issue": "Console warning '[expo-notifications] Listening to push token changes is not yet fully supported on web.' — expected on web preview, no action needed."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_loyalty_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "MANUAL VALIDATION REQUIRED ON DEVICE: The actual native camera preview cannot be exercised in web/Expo-Go web — main agent or a tester must validate on a physical Android/iOS device or Expo Go (mobile) that the QR scanner: (a) opens with a live preview on FIRST admin-dashboard entry (no black screen), (b) scans without requiring a prior manual phone search, (c) shows the 'Initialisation de la caméra…' spinner briefly then the preview, (d) after a successful scan + customer interaction + clear-customer-btn, the camera re-opens and scans the next customer without app restart.",
+    "OPTIONAL: clean up deprecated React Native style props (textShadow*) across components — emits warnings on every page load."
+  ],
+  "critical_code_review_comments": [
+    "admin.tsx camera-mount gating is implemented correctly: scanning && isFocused && permission?.granted && !customer guards the effect, and CameraView is only rendered when camMountReady is also true. The 350ms timer + camKey bump + cameraReady reset together cover the three failure modes that produced the original black screen (mid-transition mount, stale session reuse, no readiness signal).",
+    "Re-arm logic in the auto-open effect (l. 91-111) correctly re-triggers scanning whenever `customer` is cleared, so the tablet stays ready for the next customer without manual interaction. Combined with clear-customer-btn's explicit setScanning(true), the next-customer cycle is robust.",
+    "server.py is large (>1400 lines). Non-blocking, but consider splitting into routers (auth/menu/loyalty/reservations/ads/push) for maintainability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Pytest creates one OTP-customer per session (phone +3360XXXXXXXX, name 'TEST_Cust') and transient menu/ad slides cleaned up in-test. No leftover production data modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend base URL: EXPO_PUBLIC_BACKEND_URL=https://loyalty-kiosk-tablet.preview.emergentagent.com. Admin: admin@pizzadenfert.fr / Admin1234!. OTP DEMO MODE: POST /api/auth/otp/request → dev_code in response. Run regression with: cd /app && python -m pytest backend/tests/test_loyalty_api.py -v. Frontend testIDs: admin-email-input, admin-password-input, admin-login-btn, admin-panel, toggle-manual-search, search-input, search-btn, customer-card, confirm-pizzas-btn, clear-customer-btn, start-scan-btn, stop-scan-btn. The 'camera only on mobile' notice on web is EXPECTED — not a bug. Actual scanner fix verification requires a physical device.",
+  "rca_of_issue": "Original bug: CameraView mounted synchronously during the route fade transition, with a single camera session reused across scan cycles, produced a black preview on first open that recovered only after navigating away and back. Fix verified at the code level: (1) useIsFocused ensures the camera isn't mounted before the screen is actually visible; (2) a 350ms setTimeout before flipping camMountReady=true lets the route transition complete so the native camera surface is created on a settled view tree; (3) bumping camKey forces React to unmount/remount CameraView each scan cycle, giving every scan a brand-new session (avoids stale session black frames); (4) onCameraReady drives a clear spinner so the user perceives initialisation rather than a black screen; (5) clearing a customer re-arms scanning so the tablet is immediately ready for the next customer. All five conditions are present and ordered correctly in admin.tsx (lines 53-130, 481). Behavioural verification on native hardware is REQUIRED to confirm the user-facing bug is fully resolved."
+}
