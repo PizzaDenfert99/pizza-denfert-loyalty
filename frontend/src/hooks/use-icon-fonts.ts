@@ -1,8 +1,16 @@
-// Icon font loader for Expo apps. Fonts are loaded from a CDN only under
-// Expo Go (StoreClient) — that's where @expo/vector-icons' .ttf files come
-// back as 0 bytes from Metro's asset resolver on Android. Native dev/prod
-// builds and web pass an empty map, so useFonts resolves to [true, null]
-// immediately via react-native-vector-icons autolinking / web stubs.
+// Icon font loader + premium brand serif/script fonts.
+//
+// ICONS (Expo Go only): @expo/vector-icons' .ttf files come back as 0 bytes
+// from Metro's asset resolver on Android Expo Go, so under StoreClient we load
+// them from a CDN. Native dev/prod builds + web pass an empty map (icons are
+// bundled / web-stubbed) so useFonts resolves immediately.
+//
+// BRAND FONTS (all environments): Playfair Display (serif wordmark) and
+// Dancing Script (script tagline) are bundled locally as .ttf and loaded via
+// expo-font — NO @expo-google-fonts dependency. The screens reference the
+// weight-suffixed family names (e.g. "PlayfairDisplay_600SemiBold"); we map
+// each of those names to the bundled variable TTF so they all resolve.
+//
 // ICON_VECTOR_VERSION must match @expo/vector-icons in package.json.
 // Usage: const [loaded, error] = useIconFonts();
 
@@ -26,11 +34,9 @@ const ICON_FAMILIES: Record<string, string> = {
   octicons: "Octicons",
   "simple-line-icons": "SimpleLineIcons",
   zocial: "Zocial",
-  // FontAwesome5 style variants (key = `FontAwesome5Free-<style>`)
   "FontAwesome5Free-Regular": "FontAwesome5_Regular",
   "FontAwesome5Free-Solid": "FontAwesome5_Solid",
   "FontAwesome5Free-Brand": "FontAwesome5_Brands",
-  // FontAwesome6 style variants (key = `FontAwesome6Free-<style>`)
   "FontAwesome6Free-Regular": "FontAwesome6_Regular",
   "FontAwesome6Free-Solid": "FontAwesome6_Solid",
   "FontAwesome6Free-Brand": "FontAwesome6_Brands",
@@ -44,9 +50,25 @@ const iconFontMap = (): Record<string, string> =>
     Object.entries(ICON_FAMILIES).map(([key, file]) => [key, cdnUrl(file)]),
   );
 
+// Bundled brand fonts (local .ttf). The same variable TTF backs each weight name.
+const playfair = require("../../assets/fonts/PlayfairDisplay-Variable.ttf");
+const dancing = require("../../assets/fonts/DancingScript-Variable.ttf");
+
+const brandFontMap = (): Record<string, any> => ({
+  PlayfairDisplay_400Regular: playfair,
+  PlayfairDisplay_500Medium: playfair,
+  PlayfairDisplay_600SemiBold: playfair,
+  PlayfairDisplay_700Bold: playfair,
+  CormorantGaramond: playfair,
+  DancingScript_500Medium: dancing,
+  DancingScript_600SemiBold: dancing,
+  DancingScript_700Bold: dancing,
+});
+
 export const useIconFonts = (): readonly [boolean, Error | null] =>
-  useFonts(
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+  useFonts({
+    ...(Constants.executionEnvironment === ExecutionEnvironment.StoreClient
       ? iconFontMap()
-      : {},
-  );
+      : {}),
+    ...brandFontMap(),
+  });
