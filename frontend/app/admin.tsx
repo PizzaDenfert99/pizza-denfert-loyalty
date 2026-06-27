@@ -48,6 +48,7 @@ function AdminPanel() {
   const [customer, setCustomer] = useState<any>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchInput, setSearchInput] = useState("");
+  const [showManualSearch, setShowManualSearch] = useState(false);
   const [pendingQty, setPendingQty] = useState<number>(1);     // staff dials this up/down then confirms
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,26 +74,30 @@ function AdminPanel() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // Auto-open the camera when admin lands on the screen (native only)
+  // Scanner is the PRIMARY workflow: auto-open the camera the moment an admin
+  // lands on the dashboard (native only), and re-arm it whenever the staff
+  // finishes with a customer (customer cleared) so the next scan is instant.
   useEffect(() => {
     if (!user || !user.is_admin) return;
     if (Platform.OS === "web") return; // web preview cannot use the native camera
-    if (customer) return; // already viewing a customer
-    if (permissionRequested) return;
-    setPermissionRequested(true);
+    if (!isLoyaltyApp()) return;
+    if (customer) return; // viewing a customer — pause scanning
     (async () => {
       try {
         if (permission?.granted) {
           setScanning(true);
           return;
         }
-        if (permission?.canAskAgain ?? true) {
+        if (!permissionRequested && (permission?.canAskAgain ?? true)) {
+          setPermissionRequested(true);
           const r = await requestPermission();
           if (r.granted) setScanning(true);
         }
       } catch {}
     })();
-  }, [user, permission?.granted, permission?.canAskAgain, permissionRequested, customer]);
+    // requestPermission from useCameraPermissions is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, customer, permission?.granted, permission?.canAskAgain, permissionRequested]);
 
   const submitLogin = async () => {
     setAuthErr(null);
@@ -315,8 +320,20 @@ function AdminPanel() {
                 </View>
               )}
 
-              {/* Fallback: manual search by phone/name (secondary option) */}
-              <Text style={[styles.sectionLbl, { marginTop: theme.space.xl }]}>{lang === "fr" ? "OU RECHERCHE MANUELLE" : "OR MANUAL SEARCH"}</Text>
+              {/* Fallback only: manual search (QR unreadable). Hidden by default
+                  so the camera stays the primary, fastest workflow. */}
+              <Pressable
+                testID="toggle-manual-search"
+                onPress={() => setShowManualSearch((v) => !v)}
+                style={styles.fallbackToggle}
+              >
+                <Feather name={showManualSearch ? "chevron-up" : "search"} size={14} color={theme.color.muted} />
+                <Text style={styles.fallbackToggleTxt}>
+                  {lang === "fr" ? "QR illisible ? Recherche manuelle" : "Can't scan? Manual search"}
+                </Text>
+              </Pressable>
+
+              {showManualSearch && (
               <View style={{ flexDirection: "row", gap: 8, marginBottom: theme.space.lg }}>
                 <TextInput
                   testID="search-input"
@@ -328,6 +345,7 @@ function AdminPanel() {
                   autoCapitalize="none"
                   returnKeyType="search"
                   onSubmitEditing={onSearchPress}
+                  autoFocus
                 />
                 <Pressable
                   testID="search-btn"
@@ -338,6 +356,7 @@ function AdminPanel() {
                   {busy ? <ActivityIndicator color={theme.color.onBrandPrimary} size="small" /> : <Feather name="search" size={18} color={theme.color.onBrandPrimary} />}
                 </Pressable>
               </View>
+              )}
 
               {searchResults.length > 0 && (
                 <View style={{ marginBottom: theme.space.lg }}>
@@ -614,6 +633,8 @@ const styles = StyleSheet.create({
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
   stopScanBtn: { position: "absolute", top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
+  fallbackToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: theme.space.lg, marginBottom: theme.space.sm },
+  fallbackToggleTxt: { color: theme.color.muted, fontSize: 13, fontWeight: "500", textDecorationLine: "underline" },
   customerHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: theme.space.lg },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   avatarTxt: { color: theme.color.onBrandPrimary, fontSize: 22, fontWeight: "700" },
