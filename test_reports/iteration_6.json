@@ -1,0 +1,23 @@
+{
+  "summary": "Verified the SHARED CMS at /admin-cms/dashboard (testID menu-cms) is the SINGLE menu management surface for the Loyalty app. Backend pytest 5/5 PASS (test_menu_revision.py): GET /api/menu/version baseline, GET /api/menu returns array without _id, POST /api/admin/menu (201) creates item + rev+1 + count+1, PATCH bumps rev (count unchanged), DELETE bumps rev + decrements count + nonexistent returns 404, admin endpoints reject unauthenticated calls (401/403). Frontend E2E on real preview (tablet viewport 768x1024): admin login with admin@pizzadenfert.fr/Admin1234! at /admin renders admin-panel; tapping open-cms-btn navigates to /admin-cms/dashboard which mounts testID menu-cms — i.e. exactly the same screen as visiting /admin-cms directly (no separate admin menu UI exists). Created an OnePanelProbeUI desserts item at 4.5€ via cms-add-item → editor-cat-desserts → editor-name → editor-price → editor-save: item appeared in CMS list. Tapping it opened the editor and editor-delete removed it (post-delete count=0). Single source of truth confirmed by code grep: only admin-cms/dashboard.tsx calls adminListMenu/adminCreateMenuItem/adminUpdateMenuItem/adminDeleteMenuItem (→ /api/admin/menu).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_menu_revision.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admin.tsx has a duplicate testID conflict: both the Pressable that opens /admin-settings (line 444) and the camera-blocked deep-link button (line 355) use testID=\"open-settings-btn\". On the admin-panel surface only the /admin-settings one renders (the other is on the login screen), so it does not affect this iteration, but should be renamed (e.g. camera-open-settings-btn) to avoid future Playwright ambiguity.",
+    "Single-source-of-truth confirmed by grep: only /app/frontend/app/admin-cms/dashboard.tsx writes to /api/admin/menu via src/api.ts helpers; no other menu-editing screen exists in the loyalty app."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Test items OnePanelProbeUI (UI flow) and TEST_Probe_* (pytest) were created and deleted within the same test runs. No residual data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use page.context.request for backend probes from within Playwright scripts. The native QR scanner on /admin cannot be exercised in the web preview (expected). Admin-panel testIDs: open-cms-btn → /admin-cms (redirects to /admin-cms/dashboard, testID menu-cms). CMS editor testIDs: cms-add-item, editor-cat-<key>, editor-name, editor-desc, editor-ingredients, editor-sizes-toggle, editor-price | editor-price-26/31, editor-save, editor-delete, editor-close.",
+  "rca_of_issue": "N/A — feature works as designed. The Loyalty admin (/admin) is a QR-scanner + loyalty operations hub; its ONLY menu-editing entry point is the open-cms-btn shortcut that navigates to the shared MongoDB CMS at /admin-cms/dashboard. CRUD on that page writes via /api/admin/menu, bumps meta.menu.rev, and is reflected in the public /api/menu and /api/menu/version, confirming a single source of truth."
+}
