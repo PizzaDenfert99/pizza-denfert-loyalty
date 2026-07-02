@@ -41,9 +41,13 @@ OVH_CONSUMER_KEY=""
 OVH_SMS_SERVICE=""
 OVH_SMS_SENDER=""
 
-# Supabase — OPTIONAL & NOT USED (menu served from MongoDB)
-SUPABASE_URL=""
-SUPABASE_SERVICE_ROLE_KEY=""
+# Supabase — required for CMS write endpoints (menu items, categories, settings).
+# The customer app menu is served from Supabase PostgreSQL. Same project is
+# consumed by BOTH the customer app and the loyalty admin CMS.
+# New project (2026-06-30 migration): fuxyinngmdzzoumloenv
+SUPABASE_URL="${SUPABASE_URL:-https://fuxyinngmdzzoumloenv.supabase.co}"
+SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
+SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 
 # Web Push / VAPID — OPTIONAL
 VAPID_PUBLIC_KEY=""
