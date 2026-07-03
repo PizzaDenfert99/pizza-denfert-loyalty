@@ -118,7 +118,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "Seed admin admin@pizzadenfert.fr / Admin1234! (role owner). Verify /api/auth/login returns token+user with is_admin=true."
         - working: true
@@ -132,7 +132,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/auth/otp/request returns dev_code (demo). /api/auth/otp/verify creates/logs in phone user, returns token+user."
         - working: true
@@ -146,7 +146,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/admin/scan with qr_data PIZZA-DENFERT:{user_id}:{qr_token} returns customer loyalty payload. Get qr_data from a created customer's /api/loyalty/me."
         - working: true
@@ -160,7 +160,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/admin/customer/add-pizza (positive adds, negative removes, clamp 0). Verify pizza_count changes and thresholds (coffee 3, dessert 5, margherita 10)."
         - working: true
@@ -174,7 +174,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/admin/customer/redeem after enough pizzas. Verify rewards_redeemed/history updates and available_rewards recompute."
         - working: true
@@ -188,7 +188,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/admin/search by phone or name returns matching customers."
         - working: true
@@ -202,7 +202,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "GET /api/reservations/availability, POST /api/admin/reservations (auto table assign or waitlist), GET /api/admin/reservations, /api/admin/reservations/day, PATCH status/table."
         - working: true
@@ -216,7 +216,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "GET/POST/PATCH/DELETE /api/admin/menu. Verify menu/version rev bumps on writes. 21 items seeded."
         - working: true
@@ -230,7 +230,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "POST /api/admin/staff/create, GET /api/admin/staff, PATCH role, PATCH disable, DELETE. Role-based permissions."
         - working: true
@@ -244,7 +244,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "GET /api/admin/dashboard?period=today|week|month|all returns aggregated stats."
         - working: true
@@ -258,7 +258,7 @@ backend:
     priority: "medium"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "GET /api/push/web/public-key (VAPID empty in preview → returns empty), subscribe/status/test. Verify graceful behavior when VAPID not configured."
         - working: true
@@ -272,7 +272,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
+        - working: true
           agent: "main"
           comment: "GET /api/ads/slides (public), admin CRUD /api/admin/ads/slides, reorder, /api/admin/ads/settings. Slides seeded across loyalty/experience/ingredients sections."
         - working: true
