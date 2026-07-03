@@ -220,8 +220,8 @@ function ItemEditor({ item, onClose, onSaved, onToast }: {
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.modalOverlay}>
         <View style={s.modalCard}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flexShrink: 1 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
               <View style={s.modalHead}>
                 <Text style={s.modalTitle}>{isNew ? "Nouveau plat" : "Modifier le plat"}</Text>
                 <Pressable testID="editor-close" onPress={onClose} hitSlop={12}><Feather name="x" size={22} color={theme.color.onSurface} /></Pressable>
@@ -318,7 +318,7 @@ const s = StyleSheet.create({
   toast: { position: "absolute", bottom: 30, alignSelf: "center", backgroundColor: theme.color.brand, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
   toastTxt: { color: theme.color.onBrandPrimary, fontWeight: "700", fontSize: 13 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: theme.color.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: theme.space.xl, maxHeight: "92%", borderTopWidth: 1, borderColor: theme.color.borderStrong },
+  modalCard: { backgroundColor: theme.color.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: theme.space.xl, maxHeight: "92%", overflow: "hidden", borderTopWidth: 1, borderColor: theme.color.borderStrong },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: theme.space.lg },
   modalTitle: { color: theme.color.onSurface, fontSize: 22, fontWeight: "300" },
   imagePick: { height: 160, borderRadius: theme.radius.md, overflow: "hidden", marginBottom: theme.space.md, borderWidth: 1, borderColor: theme.color.border, borderStyle: "dashed" },
