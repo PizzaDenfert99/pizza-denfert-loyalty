@@ -86,11 +86,11 @@ function AdminPanel() {
   };
 
   // Scanner is the PRIMARY workflow: auto-open the camera the moment an admin
-  // lands on the dashboard (native only), and re-arm it whenever the staff
-  // finishes with a customer (customer cleared) so the next scan is instant.
+  // lands on the dashboard (native AND web — Android tablet browsers support
+  // the camera via getUserMedia + BarcodeDetector for QR), and re-arm it
+  // whenever the staff finishes with a customer so the next scan is instant.
   useEffect(() => {
     if (!user || !user.is_admin) return;
-    if (Platform.OS === "web") return; // web preview cannot use the native camera
     if (!isLoyaltyApp()) return;
     if (customer) return; // viewing a customer — pause scanning
     (async () => {
@@ -116,13 +116,12 @@ function AdminPanel() {
   // after navigating away and back. We also bump `camKey` so every scan cycle
   // gets a fresh camera session, and reset readiness when scanning stops.
   useEffect(() => {
-    if (Platform.OS === "web") return;
     if (scanning && isFocused && permission?.granted && !customer) {
       setCameraReady(false);
       const id = setTimeout(() => {
         setCamKey((k) => k + 1);
         setCamMountReady(true);
-      }, 350);
+      }, 300);
       return () => clearTimeout(id);
     }
     setCamMountReady(false);
@@ -225,17 +224,13 @@ function AdminPanel() {
   };
 
   const startScan = async () => {
-    if (Platform.OS === "web") {
-      setError(lang === "fr" ? "Caméra non disponible sur le web. Utilisez l'app mobile." : "Camera unavailable on web. Use the mobile app.");
-      return;
-    }
     if (permission?.granted) { setScanning(true); return; }
     if (permission?.canAskAgain ?? true) {
       const r = await requestPermission();
       if (r.granted) setScanning(true);
-      else if (!r.canAskAgain) setError(lang === "fr" ? "Accès caméra bloqué. Ouvrez les réglages." : "Camera blocked. Open settings.");
+      else if (!r.canAskAgain) setError(lang === "fr" ? "Accès caméra bloqué. Autorisez la caméra dans les réglages du navigateur/app." : "Camera blocked. Allow camera in browser/app settings.");
     } else {
-      setError(lang === "fr" ? "Accès caméra bloqué. Ouvrez les réglages." : "Camera blocked. Open settings.");
+      setError(lang === "fr" ? "Accès caméra bloqué. Autorisez la caméra dans les réglages du navigateur/app." : "Camera blocked. Allow camera in browser/app settings.");
     }
   };
 
@@ -311,7 +306,7 @@ function AdminPanel() {
               {isLoyaltyApp() && (
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
-                  {scanning && Platform.OS !== "web" && permission?.granted && isFocused ? (
+                  {scanning && permission?.granted && isFocused ? (
                 <View style={styles.cameraWrap}>
                   {camMountReady && (
                     <CameraView
@@ -321,6 +316,9 @@ function AdminPanel() {
                       barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                       onBarcodeScanned={handleBarcode}
                       onCameraReady={() => setCameraReady(true)}
+                      {...(Platform.OS === "web"
+                        ? ({ onBarCodeScanned: handleBarcode, barCodeScannerSettings: { barCodeTypes: ["qr"] } } as any)
+                        : {})}
                     />
                   )}
                   {!cameraReady && (
@@ -339,22 +337,26 @@ function AdminPanel() {
                 <View style={styles.scanPlaceholder}>
                   <Feather name="camera" size={40} color={theme.color.brand} />
                   <Text style={styles.placeholderTxt}>
-                    {Platform.OS === "web"
-                      ? (lang === "fr" ? "Le scanner caméra n'est disponible que sur l'app mobile" : "QR scanner is only available on the mobile app")
-                      : permanentlyBlocked
-                        ? (lang === "fr" ? "Caméra bloquée. Activez l'accès dans les réglages." : "Camera blocked. Enable access in settings.")
-                        : (lang === "fr" ? "Scannez le QR de fidélité du client" : "Scan the customer's loyalty QR")}
+                    {permanentlyBlocked
+                      ? (lang === "fr" ? "Caméra bloquée. Autorisez l'accès dans les réglages du navigateur/app." : "Camera blocked. Allow access in browser/app settings.")
+                      : (lang === "fr" ? "Scannez le QR de fidélité du client" : "Scan the customer's loyalty QR")}
                   </Text>
-                  {Platform.OS !== "web" && !permanentlyBlocked && (
+                  {!permanentlyBlocked && (
                     <Pressable testID="start-scan-btn" onPress={startScan} style={styles.scanCta}>
                       <Feather name="maximize" size={16} color={theme.color.onBrandPrimary} />
                       <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir le scanner" : "Open scanner"}</Text>
                     </Pressable>
                   )}
-                  {Platform.OS !== "web" && permanentlyBlocked && (
-                    <Pressable testID="open-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
+                  {permanentlyBlocked && Platform.OS !== "web" && (
+                    <Pressable testID="open-camera-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
                       <Feather name="settings" size={16} color={theme.color.onBrandPrimary} />
                       <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir les réglages" : "Open settings"}</Text>
+                    </Pressable>
+                  )}
+                  {permanentlyBlocked && Platform.OS === "web" && (
+                    <Pressable testID="retry-camera-btn" onPress={startScan} style={styles.scanCta}>
+                      <Feather name="refresh-cw" size={16} color={theme.color.onBrandPrimary} />
+                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Réessayer la caméra" : "Retry camera"}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -478,7 +480,7 @@ function AdminPanel() {
                 </View>
                 <Pressable
                   testID="clear-customer-btn"
-                  onPress={() => { setCustomer(null); setError(null); setPermissionRequested(false); lastScanRef.current = null; if (Platform.OS !== "web" && permission?.granted) setScanning(true); }}
+                  onPress={() => { setCustomer(null); setError(null); setPermissionRequested(false); lastScanRef.current = null; if (permission?.granted) setScanning(true); }}
                   style={styles.iconBtn}
                 >
                   <Feather name="x" size={18} color={theme.color.onSurfaceTertiary} />
