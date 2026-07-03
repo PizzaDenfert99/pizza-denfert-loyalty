@@ -33,10 +33,21 @@ MONGO_URL, DB_NAME, JWT_SECRET, SMS_PROVIDER (""|twilio|ovh), OTP_DEMO_MODE,
 TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER, OVH_APP_KEY/APP_SECRET/CONSUMER_KEY/SMS_SERVICE/SMS_SENDER.
 
 ## Backlog / Next
-- P1: Connect this loyalty backend to the main customer app (shared `users` by phone — already compatible).
 - P1: Activate real SMS (set SMS_PROVIDER + creds, restart backend).
 - P2: Menu CMS bulk reorder; image compression for base64 slide/menu images.
 - P2: Reservation timeline polish.
+
+## Re-import & full verification (2026-07-03)
+- Re-imported from GitHub (pizza-denfert-loyalty). .env files were gitignored/missing → recreated:
+  backend/.env (MONGO_URL local, DB_NAME=pizzadenfert, generated JWT_SECRET, OTP demo) and
+  frontend/.env (EXPO_PUBLIC_BACKEND_URL=preview URL). Installed missing pywebpush dep.
+- This repo's backend IS the canonical shared Pizza Denfert backend (see SYNC.md); loyalty tablet
+  now runs the identical code/schema/collections the customer app uses. In production both apps share
+  one VPS MongoDB + one JWT_SECRET.
+- Full E2E: backend 14/14 PASS. Frontend UI: customer + admin flows PASS. Fixed 2 minor UI bugs
+  (Menu CMS modal delete button off-screen; reservation create testIDs) — both verified by testing agent.
+- VPS deploy TODO: identical JWT_SECRET across both apps, shared MONGO_URL/DB_NAME, tablet
+  EXPO_PUBLIC_BACKEND_URL → production API domain.
 
 ## Build (APK)
 Use the Emergent **Publish** button (top-right). app.config.ts defaults to the loyalty variant so the generated APK is "Pizza Denfert · Fidélité" (package fr.pizzadenfert.loyalty). EAS CLI / external accounts are NOT used.

@@ -292,6 +292,10 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: "Backend: 14/14 features PASS, no issues. Frontend full UI test: customer flows PASS (kiosk slideshow, OTP login, loyalty card/QR, rewards). Admin UI 8/10 initially, 2 minor issues found: (1) Menu CMS editor modal delete button off-screen, (2) reservation create name input missing testID."
+    - agent: "main"
+      message: "Fixed both frontend issues: (1) admin-cms/dashboard.tsx editor modal — added flexShrink:1 to KeyboardAvoidingView + overflow:hidden on modalCard + paddingBottom so the ScrollView bounds correctly and the Supprimer button is reachable; (2) added create-name-input/create-phone-input testIDs on admin-reservations.tsx create form. Re-tested via testing agent: BOTH fixes verified PASS at 1280x800 and 1024x768."
     - agent: "main"
       message: "Imported GitHub loyalty repo. Recreated missing .env files (backend local Mongo + generated JWT; frontend EXPO_PUBLIC_BACKEND_URL) and installed pywebpush. Backend healthy, 21 menu items + admin seeded. Please run a FULL end-to-end test of all backend features listed above. Admin creds: admin@pizzadenfert.fr / Admin1234!. OTP is in DEMO mode (dev_code returned in response). VAPID push keys are intentionally empty in preview — verify push endpoints degrade gracefully rather than 500. Fix nothing yourself; report failures with details."
     - agent: "testing"
