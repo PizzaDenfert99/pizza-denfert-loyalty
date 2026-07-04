@@ -34,6 +34,20 @@ TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER, OVH_APP_KEY/APP_SECRET/CONSUMER_KEY/S
 
 ## Backlog / Next
 - P1: Activate real SMS (set SMS_PROVIDER + creds, restart backend).
+
+## Deployment build fix (2026-07-04)
+- EAS Android app-bundle build failed: "No lockfile found in the project directory. A lockfile is
+  required..." → root cause: package.json pins packageManager yarn@1.22.22 but only package-lock.json
+  existed (no yarn.lock). Fix (code-level): removed package-lock.json and generated yarn.lock
+  (`yarn install --ignore-scripts`, 7414 lines). yarn.lock is NOT gitignored → included in deploy zip.
+- Did NOT edit READ-ONLY supervisord.conf nor add tunnel env vars (deployment_agent generic
+  suggestions) — unrelated to the build failure and would break the working preview.
+- Verified: expo still bundles (HTTP 200) and frontend smoke test PASS (app loads, admin login OK,
+  scanner primary) after the lockfile change.
+- IMPORTANT CAVEAT: the Emergent build pipeline auto-rewrites EXPO_PUBLIC_BACKEND_URL to the
+  emergent.host URL at build time (log showed -> https://tablet-qr-scanner.emergent.host). So an
+  APK built via Emergent Publish points at the Emergent-hosted backend (+Atlas), NOT the VPS
+  api.pizzadenfert.fr. If the tablet must hit the VPS, that URL override needs to be handled separately.
 - P2: Menu CMS bulk reorder; image compression for base64 slide/menu images.
 - P2: Reservation timeline polish.
 
