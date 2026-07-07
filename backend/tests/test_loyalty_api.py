@@ -17,7 +17,7 @@ import pytest
 import requests
 
 BASE_URL = (os.environ.get("EXPO_PUBLIC_BACKEND_URL")
-            or "https://tablet-qr-scanner.preview.emergentagent.com").rstrip("/")
+            or "https://pizza-tablet-build.preview.emergentagent.com").rstrip("/")
 
 ADMIN_EMAIL = "admin@pizzadenfert.fr"
 ADMIN_PASSWORD = "Admin1234!"

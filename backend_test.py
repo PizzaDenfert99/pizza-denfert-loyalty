@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 # Base URL from frontend/.env
-BASE_URL = "https://e5a73cdc-c766-4d36-8ed1-8ed2a54a2645.preview.emergentagent.com/api"
+BASE_URL = "https://pizza-tablet-build.preview.emergentagent.com/api"
 
 # Admin credentials from test_credentials.md
 ADMIN_EMAIL = "admin@pizzadenfert.fr"
