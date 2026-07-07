@@ -73,6 +73,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "variant": "loyalty",
+      "buildLabel": "loyalty",
+      "router": {},
+      "eas": {
+        "projectId": "64ab81bf-cf15-46ed-af92-3c1d6089e240"
+      }
     }
   }
 }
