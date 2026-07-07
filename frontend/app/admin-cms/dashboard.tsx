@@ -47,11 +47,13 @@ const CATEGORIES = [
 ];
 
 export default function MenuCmsRoute() {
+  console.log("[CMS-DEBUG] MenuCmsRoute rendered, isLoyaltyApp()=", isLoyaltyApp());
   if (!isLoyaltyApp()) return <Redirect href={"/" as any} />;
   return <MenuCms />;
 }
 
 function MenuCms() {
+  console.log("[CMS-DEBUG] MenuCms mounted");
   const router = useRouter();
   const { user, loading } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
@@ -77,8 +79,10 @@ function MenuCms() {
   }, []);
 
   useEffect(() => {
+    console.log("[CMS-DEBUG] effect fired, loading=", loading, "user=", user ? { is_admin: user.is_admin } : null);
     if (loading) return;
-    if (!user || !user.is_admin) { router.replace("/admin"); return; }
+    if (!user || !user.is_admin) { console.log("[CMS-DEBUG] bailing: not admin, redirecting to /admin"); router.replace("/admin"); return; }
+    console.log("[CMS-DEBUG] calling refresh()");
     refresh();
   }, [user, loading]);
 
