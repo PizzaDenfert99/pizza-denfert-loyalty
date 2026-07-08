@@ -89,26 +89,40 @@ function AdminPanel() {
   // lands on the dashboard (native AND web — Android tablet browsers support
   // the camera via getUserMedia + BarcodeDetector for QR), and re-arm it
   // whenever the staff finishes with a customer so the next scan is instant.
+  //
+  // The `isFocused` gate + delay mirror the camMountReady fix below: firing the
+  // native requestPermissionsAsync() call while the route's fade transition is
+  // still animating (i.e. on the very first mount, before the screen has fully
+  // settled) can make the OS silently reject/dismiss the prompt on the physical
+  // tablet, which permanently sets permissionRequested and skips all further
+  // auto-attempts — the only escape hatch was the incidental reset that happens
+  // when staff clear a customer after a manual search. Waiting for focus + a
+  // short settle delay lets the initial permission request actually succeed.
   useEffect(() => {
     if (!user || !user.is_admin) return;
     if (!isLoyaltyApp()) return;
     if (customer) return; // viewing a customer — pause scanning
-    (async () => {
-      try {
-        if (permission?.granted) {
-          setScanning(true);
-          return;
-        }
-        if (!permissionRequested && (permission?.canAskAgain ?? true)) {
-          setPermissionRequested(true);
-          const r = await requestPermission();
-          if (r.granted) setScanning(true);
-        }
-      } catch {}
-    })();
+    if (!isFocused) return;
+    let active = true;
+    const id = setTimeout(() => {
+      (async () => {
+        try {
+          if (permission?.granted) {
+            setScanning(true);
+            return;
+          }
+          if (!permissionRequested && (permission?.canAskAgain ?? true)) {
+            setPermissionRequested(true);
+            const r = await requestPermission();
+            if (active && r.granted) setScanning(true);
+          }
+        } catch {}
+      })();
+    }, 350);
+    return () => { active = false; clearTimeout(id); };
     // requestPermission from useCameraPermissions is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, customer, permission?.granted, permission?.canAskAgain, permissionRequested]);
+  }, [user, customer, isFocused, permission?.granted, permission?.canAskAgain, permissionRequested]);
 
   // Mount the native CameraView only AFTER the screen is focused and the route
   // fade transition has settled. Mounting it synchronously on first render (or
