@@ -12,7 +12,8 @@ import {
   View, Text, StyleSheet, Pressable, Image, Platform,
   Animated, ActivityIndicator, useWindowDimensions,
 } from "react-native";
-import * as ScreenOrientation from "expo-screen-orientation";
+import * as NavigationBar from "expo-navigation-bar";
+import { setStatusBarHidden } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, Redirect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -71,15 +72,21 @@ function Kiosk() {
 
   const timer = useRef<any>(null);
 
-  // ── Force landscape while the kiosk screensaver is on screen ────────────────
-  // Requires app.json's top-level "orientation" to be "default" (not "portrait")
-  // — a native manifest lock to portrait overrides any runtime lockAsync call on
-  // Android, so this only takes effect in a build produced after that change.
+  // ── Immersive fullscreen while the kiosk screensaver is on screen ───────────
+  // Hide the status bar and (on Android) the system navigation bar so only the
+  // slides are visible. Both are restored on unmount.
   useEffect(() => {
     if (Platform.OS === "web") return;
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    setStatusBarHidden(true, "fade");
+    if (Platform.OS === "android") {
+      NavigationBar.setBehaviorAsync("overlay-swipe").catch(() => {});
+      NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+    }
     return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      setStatusBarHidden(false, "fade");
+      if (Platform.OS === "android") {
+        NavigationBar.setVisibilityAsync("visible").catch(() => {});
+      }
     };
   }, []);
 
@@ -184,12 +191,12 @@ function Kiosk() {
         )}
       </Animated.View>
 
-      {/* Dark overlay for non-loyalty sections */}
+      {/* Subtle dark gradient behind the caption text only — photo stays visible */}
       {meta.overlay && (
         <LinearGradient
-          colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.5)", "rgba(0,0,0,0.92)"]}
-          locations={[0, 0.4, 1]}
-          style={StyleSheet.absoluteFill}
+          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.18)", "rgba(0,0,0,0.55)"]}
+          locations={[0, 0.45, 1]}
+          style={s.captionGradient}
         />
       )}
 
@@ -317,6 +324,13 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 40,
     zIndex: 5,
+  },
+  captionGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 320,
   },
   tag: {
     fontSize: 11,
