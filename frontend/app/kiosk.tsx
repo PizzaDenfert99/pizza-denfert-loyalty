@@ -75,6 +75,11 @@ function Kiosk() {
   // ── Immersive fullscreen while the kiosk screensaver is on screen ───────────
   // Hide the status bar and (on Android) the system navigation bar so only the
   // slides are visible. Both are restored on unmount.
+  //
+  // Re-applied on every dimension change (i.e. device rotation) because Android
+  // re-lays-out the window for the new orientation and can drop the hidden
+  // flag in the process — without this the nav bar came back after a rotate
+  // and stayed that way.
   useEffect(() => {
     if (Platform.OS === "web") return;
     setStatusBarHidden(true, "fade");
@@ -88,6 +93,25 @@ function Kiosk() {
         NavigationBar.setVisibilityAsync("visible").catch(() => {});
       }
     };
+  }, [width, height]);
+
+  // ── Keep the nav bar hidden once it's revealed ───────────────────────────────
+  // `setBehaviorAsync` only controls the reveal gesture when edge-to-edge is
+  // disabled; this app runs with `edgeToEdgeEnabled: true` (app.json), so that
+  // call above is a no-op and Android is free to leave the bar up once it's
+  // shown. In portrait the swipe-to-reveal zone sits right behind the kiosk's
+  // own bottom UI (dots row, progress bar, tap hint), so it's far more likely
+  // to get triggered there than in landscape — which is why the bug showed up
+  // as "portrait-only". Listen for reveals and immediately re-hide instead of
+  // depending on the behavior mode.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = NavigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === "visible") {
+        NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   // ── Fetch slides ─────────────────────────────────────────────────────────────
