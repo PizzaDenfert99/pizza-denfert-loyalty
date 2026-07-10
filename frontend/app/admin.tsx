@@ -58,7 +58,33 @@ function AdminPanel() {
   //    native CameraView (mounting mid-transition yields a black surface)
   //  - cameraReady: onCameraReady fired → hide the loading spinner
   //  - camKey: bump to force a brand-new camera session each scan cycle
-  const isFocused = useIsFocused();
+  //
+  // isFocused is debounced (isFocusedRaw -> isFocused below) because we've
+  // seen repeated "scanner effect (re)armed" / mount-teardown cycles every
+  // ~7-15s in the field with no in-app trigger (no poll/interval touches
+  // `user` or `customer` while sitting on this screen) — the only remaining
+  // suspect is react-navigation's focus event stream itself flapping
+  // (activity pause/resume, a transient overlay, etc., outside this file's
+  // control). Previously ANY blur, even a 1-frame blip, synchronously tore
+  // down a perfectly working camera session. Now a blur only counts once
+  // it's been sustained for 1.5s — a real navigation-away still tears down
+  // correctly, but a transient blip no longer nukes the camera.
+  const isFocusedRaw = useIsFocused();
+  const [isFocused, setIsFocusedDebounced] = useState(isFocusedRaw);
+  const focusBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isFocusedRaw) {
+      if (focusBlurTimerRef.current) { clearTimeout(focusBlurTimerRef.current); focusBlurTimerRef.current = null; }
+      setIsFocusedDebounced(true);
+      return;
+    }
+    console.log("[SCANNER-DEBUG] isFocused went false, debouncing 1500ms before treating as real blur");
+    focusBlurTimerRef.current = setTimeout(() => {
+      console.log("[SCANNER-DEBUG] isFocused false sustained 1500ms, treating as real blur");
+      setIsFocusedDebounced(false);
+    }, 1500);
+    return () => { if (focusBlurTimerRef.current) clearTimeout(focusBlurTimerRef.current); };
+  }, [isFocusedRaw]);
   const [camMountReady, setCamMountReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [camKey, setCamKey] = useState(0);
@@ -114,8 +140,20 @@ function AdminPanel() {
   // internal delay loop instead of the dependency array, and reading
   // permission state from a ref (permissionRef) so a retry a second later
   // isn't acting on a stale closed-over value.
+  // Tracks the previous {user, customer, isFocused} so every re-arm of this
+  // effect logs EXACTLY which dependency changed, instead of just a value
+  // dump — root-causing recurring "re-armed every 7-15s" reports needs to
+  // say definitively "isFocused flipped" vs. "user reference changed" rather
+  // than requiring us to infer it from two consecutive log lines.
+  const armEffectPrevDepsRef = useRef({ user, customer, isFocused });
   useEffect(() => {
-    console.log("[SCANNER-DEBUG] effect run", { hasUser: !!user, isAdmin: !!user?.is_admin, isLoyalty: isLoyaltyApp(), hasCustomer: !!customer, isFocused });
+    const prevDeps = armEffectPrevDepsRef.current;
+    const changedDeps: string[] = [];
+    if (prevDeps.user !== user) changedDeps.push("user");
+    if (prevDeps.customer !== customer) changedDeps.push("customer");
+    if (prevDeps.isFocused !== isFocused) changedDeps.push("isFocused");
+    armEffectPrevDepsRef.current = { user, customer, isFocused };
+    console.log("[SCANNER-DEBUG] effect run", { hasUser: !!user, isAdmin: !!user?.is_admin, isLoyalty: isLoyaltyApp(), hasCustomer: !!customer, isFocused, changedDeps: changedDeps.length ? changedDeps : ["initial-mount"] });
     if (!user || !user.is_admin) { console.log("[SCANNER-DEBUG] bail: no admin user yet"); return; }
     if (!isLoyaltyApp()) { console.log("[SCANNER-DEBUG] bail: not loyalty app"); return; }
     if (customer) { console.log("[SCANNER-DEBUG] bail: viewing a customer"); return; } // viewing a customer — pause scanning
