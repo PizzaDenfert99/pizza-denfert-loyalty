@@ -43,6 +43,10 @@ function AdminPanel() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
   const lastScanRef = useRef<{ data: string; at: number } | null>(null);
+  // Timestamp of the current camKey's mount — lets handleBarcode reject
+  // decode events that arrive right after a remount, which we suspect are
+  // stale reads queued by the PREVIOUS (just-torn-down) camera session.
+  const camMountTimeRef = useRef<number>(0);
   // Always-current permission snapshot for the retry loop below — reading
   // this instead of the closed-over `permission` avoids acting on a stale
   // value across a multi-second retry chain.
@@ -58,6 +62,7 @@ function AdminPanel() {
   const [camMountReady, setCamMountReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [camKey, setCamKey] = useState(0);
+  useEffect(() => { camMountTimeRef.current = Date.now(); }, [camKey]);
   // Window size drives the remount-on-change fix below — see the mount effect
   // for why the camera needs to react to this, not just focus/permission.
   const { width, height } = useWindowDimensions();
@@ -233,6 +238,14 @@ function AdminPanel() {
 
   const handleBarcode = (event: { data: string }) => {
     const now = Date.now();
+    console.log("[SCANNER-DEBUG] onBarcodeScanned fired", { data: event.data, camKey, msSinceCamMount: now - camMountTimeRef.current });
+    // Guard against stale decodes queued by the PREVIOUS camera session that
+    // land just after a fresh camKey mounts — these were pausing `scanning`
+    // (via processQR) before the new session ever produced a real frame.
+    if (now - camMountTimeRef.current < 1000) {
+      console.log("[SCANNER-DEBUG] ignoring barcode: too soon after camKey mount");
+      return;
+    }
     if (lastScanRef.current && lastScanRef.current.data === event.data && (now - lastScanRef.current.at) < 3000) return;
     lastScanRef.current = { data: event.data, at: now };
     processQR(event.data);
