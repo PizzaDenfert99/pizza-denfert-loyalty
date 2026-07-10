@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef }from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView, Platform, KeyboardAvoidingView, Linking } from "react-native";
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView, Platform, KeyboardAvoidingView, Linking, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -42,8 +42,12 @@ function AdminPanel() {
   // Scanner state
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(false);
-  const [permissionRequested, setPermissionRequested] = useState(false);
   const lastScanRef = useRef<{ data: string; at: number } | null>(null);
+  // Always-current permission snapshot for the retry loop below — reading
+  // this instead of the closed-over `permission` avoids acting on a stale
+  // value across a multi-second retry chain.
+  const permissionRef = useRef(permission);
+  useEffect(() => { permissionRef.current = permission; }, [permission]);
   // Camera-session gating to fix the "black preview on first open" bug:
   //  - isFocused: only mount the camera when this screen is actually focused
   //  - camMountReady: wait out the route fade transition before mounting the
@@ -54,6 +58,9 @@ function AdminPanel() {
   const [camMountReady, setCamMountReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [camKey, setCamKey] = useState(0);
+  // Window size drives the remount-on-change fix below — see the mount effect
+  // for why the camera needs to react to this, not just focus/permission.
+  const { width, height } = useWindowDimensions();
 
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
@@ -90,45 +97,78 @@ function AdminPanel() {
   // the camera via getUserMedia + BarcodeDetector for QR), and re-arm it
   // whenever the staff finishes with a customer so the next scan is instant.
   //
-  // The `isFocused` gate + delay mirror the camMountReady fix below: firing the
-  // native requestPermissionsAsync() call while the route's fade transition is
-  // still animating (i.e. on the very first mount, before the screen has fully
-  // settled) can make the OS silently reject/dismiss the prompt on the physical
-  // tablet, which permanently sets permissionRequested and skips all further
-  // auto-attempts — the only escape hatch was the incidental reset that happens
-  // when staff clear a customer after a manual search. Waiting for focus + a
-  // short settle delay lets the initial permission request actually succeed.
+  // Previous version gated retries behind a `permissionRequested` boolean that
+  // was BOTH written inside this effect AND listed in its own dependency
+  // array: setPermissionRequested(true) triggered an immediate rerun, whose
+  // cleanup killed the in-flight request's `active` flag before the real OS
+  // dialog (waiting on a human tap) resolved — silently discarding a grant
+  // that arrived a moment later — and left `permissionRequested` latched
+  // `true` forever with no retry path. The only way out was the "clear
+  // customer" button, which manually reset that flag and read the (already
+  // updated) permission state itself. Fixed here by driving retries from an
+  // internal delay loop instead of the dependency array, and reading
+  // permission state from a ref (permissionRef) so a retry a second later
+  // isn't acting on a stale closed-over value.
   useEffect(() => {
-    if (!user || !user.is_admin) return;
-    if (!isLoyaltyApp()) return;
-    if (customer) return; // viewing a customer — pause scanning
-    if (!isFocused) return;
-    let active = true;
-    const id = setTimeout(() => {
-      (async () => {
+    console.log("[SCANNER-DEBUG] effect run", { hasUser: !!user, isAdmin: !!user?.is_admin, isLoyalty: isLoyaltyApp(), hasCustomer: !!customer, isFocused });
+    if (!user || !user.is_admin) { console.log("[SCANNER-DEBUG] bail: no admin user yet"); return; }
+    if (!isLoyaltyApp()) { console.log("[SCANNER-DEBUG] bail: not loyalty app"); return; }
+    if (customer) { console.log("[SCANNER-DEBUG] bail: viewing a customer"); return; } // viewing a customer — pause scanning
+    if (!isFocused) { console.log("[SCANNER-DEBUG] bail: screen not focused yet"); return; }
+
+    let cancelled = false;
+    let retryId: ReturnType<typeof setTimeout>;
+
+    const attempt = (delayMs: number) => {
+      retryId = setTimeout(async () => {
+        if (cancelled) return;
+        const p = permissionRef.current;
+        console.log("[SCANNER-DEBUG] attempt", { granted: p?.granted, canAskAgain: p?.canAskAgain, scanning });
+        if (p?.granted) {
+          console.log("[SCANNER-DEBUG] already granted -> setScanning(true)");
+          setScanning(true);
+          return;
+        }
+        if (p && !p.canAskAgain) {
+          console.log("[SCANNER-DEBUG] permanently blocked, stopping retry loop");
+          return; // hard-denied — staff must use the "open settings" CTA
+        }
         try {
-          if (permission?.granted) {
+          console.log("[SCANNER-DEBUG] calling requestPermission()");
+          const r = await requestPermission();
+          if (cancelled) return;
+          console.log("[SCANNER-DEBUG] requestPermission() resolved", { granted: r.granted, canAskAgain: r.canAskAgain });
+          if (r.granted) {
             setScanning(true);
             return;
           }
-          if (!permissionRequested && (permission?.canAskAgain ?? true)) {
-            setPermissionRequested(true);
-            const r = await requestPermission();
-            if (active && r.granted) setScanning(true);
-          }
-        } catch {}
-      })();
-    }, 350);
-    return () => { active = false; clearTimeout(id); };
-    // requestPermission from useCameraPermissions is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, customer, isFocused, permission?.granted, permission?.canAskAgain, permissionRequested]);
+          if (r.canAskAgain) attempt(1500); // not a hard deny — retry shortly
+        } catch (e) {
+          console.log("[SCANNER-DEBUG] requestPermission() threw", e);
+          if (!cancelled) attempt(1500);
+        }
+      }, delayMs);
+    };
+
+    console.log("[SCANNER-DEBUG] scanner effect (re)armed", { isFocused, customer: !!customer, scanning });
+    attempt(350);
+    return () => { cancelled = true; clearTimeout(retryId); };
+  }, [user, customer, isFocused]);
 
   // Mount the native CameraView only AFTER the screen is focused and the route
   // fade transition has settled. Mounting it synchronously on first render (or
   // mid-transition) is what produced the black preview that only recovered
   // after navigating away and back. We also bump `camKey` so every scan cycle
   // gets a fresh camera session, and reset readiness when scanning stops.
+  //
+  // `width`/`height` are also in the deps: staff reach this screen from
+  // /kiosk, whose unmount cleanup restores the status/nav bars it hides
+  // (see kiosk.tsx) — that resize can land AFTER the camera has already
+  // mounted, leaving its native Surface sized for the pre-resize window
+  // (briefly-live-then-black/glitchy). Free device rotation is the same
+  // failure mode mid-scan. Reacting to dimension changes with the exact same
+  // safe teardown-then-remount sequence used for the initial mount makes the
+  // camera self-heal from any relayout, not just the first-open case.
   useEffect(() => {
     if (scanning && isFocused && permission?.granted && !customer) {
       setCameraReady(false);
@@ -140,7 +180,7 @@ function AdminPanel() {
     }
     setCamMountReady(false);
     setCameraReady(false);
-  }, [scanning, isFocused, permission?.granted, customer]);
+  }, [scanning, isFocused, permission?.granted, customer, width, height]);
 
   const submitLogin = async () => {
     setAuthErr(null);
@@ -494,7 +534,7 @@ function AdminPanel() {
                 </View>
                 <Pressable
                   testID="clear-customer-btn"
-                  onPress={() => { setCustomer(null); setError(null); setPermissionRequested(false); lastScanRef.current = null; if (permission?.granted) setScanning(true); }}
+                  onPress={() => { setCustomer(null); setError(null); lastScanRef.current = null; if (permission?.granted) setScanning(true); }}
                   style={styles.iconBtn}
                 >
                   <Feather name="x" size={18} color={theme.color.onSurfaceTertiary} />
