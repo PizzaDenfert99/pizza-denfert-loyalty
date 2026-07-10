@@ -161,26 +161,44 @@ function AdminPanel() {
   // after navigating away and back. We also bump `camKey` so every scan cycle
   // gets a fresh camera session, and reset readiness when scanning stops.
   //
-  // `width`/`height` are also in the deps: staff reach this screen from
-  // /kiosk, whose unmount cleanup restores the status/nav bars it hides
-  // (see kiosk.tsx) — that resize can land AFTER the camera has already
-  // mounted, leaving its native Surface sized for the pre-resize window
-  // (briefly-live-then-black/glitchy). Free device rotation is the same
-  // failure mode mid-scan. Reacting to dimension changes with the exact same
-  // safe teardown-then-remount sequence used for the initial mount makes the
-  // camera self-heal from any relayout, not just the first-open case.
+  // Split into two effects (initial mount vs. resize self-heal) because a
+  // single effect keyed on `[..., width, height]` let a kiosk→admin nav-bar
+  // resize (kiosk.tsx's unmount cleanup restores the status/nav bars it
+  // hides) repeatedly cancel-and-reschedule the mount timer before it ever
+  // fired — camMountReady stayed false forever and the screen stayed
+  // permanently black. This effect owns ONLY the initial mount and ignores
+  // width/height so nothing can block it from completing.
   useEffect(() => {
-    if (scanning && isFocused && permission?.granted && !customer) {
+    if (!(scanning && isFocused && permission?.granted && !customer)) {
+      console.log("[SCANNER-DEBUG] mount effect: conditions not met, tearing down", { scanning, isFocused, granted: permission?.granted, hasCustomer: !!customer });
+      setCamMountReady(false);
       setCameraReady(false);
-      const id = setTimeout(() => {
-        setCamKey((k) => k + 1);
-        setCamMountReady(true);
-      }, 300);
-      return () => clearTimeout(id);
+      return;
     }
-    setCamMountReady(false);
+    console.log("[SCANNER-DEBUG] mount effect: scheduling initial camera mount in 300ms");
     setCameraReady(false);
-  }, [scanning, isFocused, permission?.granted, customer, width, height]);
+    const id = setTimeout(() => {
+      console.log("[SCANNER-DEBUG] mount effect: mounting CameraView", { camKey: camKey + 1 });
+      setCamKey((k) => k + 1);
+      setCamMountReady(true);
+    }, 300);
+    return () => clearTimeout(id);
+    // width/height intentionally excluded — see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanning, isFocused, permission?.granted, customer]);
+
+  // Self-heal an ALREADY-mounted camera when the window resizes (device
+  // rotation, or the kiosk→admin nav-bar reveal landing after mount instead
+  // of before it) — bump camKey to force a fresh native Surface sized for
+  // the new dimensions. Deliberately separate from the initial-mount effect
+  // above so resize events can't block the first mount from ever happening.
+  useEffect(() => {
+    if (!camMountReady) return;
+    console.log("[SCANNER-DEBUG] resize effect: remounting live camera for new dimensions", { width, height });
+    setCameraReady(false);
+    setCamKey((k) => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height]);
 
   const submitLogin = async () => {
     setAuthErr(null);
@@ -369,7 +387,7 @@ function AdminPanel() {
                       facing="back"
                       barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                       onBarcodeScanned={handleBarcode}
-                      onCameraReady={() => setCameraReady(true)}
+                      onCameraReady={() => { console.log("[SCANNER-DEBUG] CameraView onCameraReady fired", { camKey }); setCameraReady(true); }}
                       {...(Platform.OS === "web"
                         ? ({ onBarCodeScanned: handleBarcode, barCodeScannerSettings: { barCodeTypes: ["qr"] } } as any)
                         : {})}
