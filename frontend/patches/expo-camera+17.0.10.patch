@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+index fc56526..2d36301 100644
+--- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
++++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+@@ -132,6 +132,14 @@ class ExpoCameraView(
+ 
+   private var previewView = PreviewView(context).apply {
+     elevation = 0f
++    // Force TextureView instead of the default PERFORMANCE mode's SurfaceView.
++    // SurfaceView is composited directly by the OS outside the app's own view
++    // hierarchy, so it does not participate in ancestor alpha/opacity
++    // animations (e.g. a navigator's screen-transition fade) or survive rapid
++    // open/close cycles reliably — both were observed to produce a preview
++    // that reports ready (onCameraReady fires) but never renders a visible
++    // frame. TextureView is immune to both at a negligible perf cost here.
++    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+   }
+   private val scope = CoroutineScope(Dispatchers.Main)
+   private var shouldCreateCamera = false

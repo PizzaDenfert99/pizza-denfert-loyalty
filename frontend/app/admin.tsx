@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Scroll
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import { useRouter, Redirect } from "expo-router";
+import { useRouter, Redirect, Stack } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAuth } from "@/src/auth-context";
@@ -211,20 +211,33 @@ function AdminPanel() {
   // fired — camMountReady stayed false forever and the screen stayed
   // permanently black. This effect owns ONLY the initial mount and ignores
   // width/height so nothing can block it from completing.
+  const lastTeardownAtRef = useRef<number>(0);
   useEffect(() => {
     if (!(scanning && isFocused && permission?.granted && !customer)) {
       console.log("[SCANNER-DEBUG] mount effect: conditions not met, tearing down", { scanning, isFocused, granted: permission?.granted, hasCustomer: !!customer });
+      lastTeardownAtRef.current = Date.now();
       setCamMountReady(false);
       setCameraReady(false);
       return;
     }
-    console.log("[SCANNER-DEBUG] mount effect: scheduling initial camera mount in 300ms");
     setCameraReady(false);
+    // Stopgap for a suspected Camera2/CameraX timing race: reopening the
+    // camera before the previous session's hardware teardown has actually
+    // finished at the OS level can produce a preview that reports ready
+    // (onCameraReady fires) but never renders a frame — reportedly fixed,
+    // once, by a workaround (search a customer, then clear it) whose only
+    // clear difference from a plain stop/reopen was several real seconds
+    // elapsing before the camera reopened. Enforce that gap explicitly
+    // instead of relying on it happening by accident.
+    const MIN_REOPEN_GAP_MS = 1200;
+    const elapsedSinceTeardown = Date.now() - lastTeardownAtRef.current;
+    const delay = Math.max(300, MIN_REOPEN_GAP_MS - elapsedSinceTeardown);
+    console.log("[SCANNER-DEBUG] mount effect: scheduling camera mount", { delay, elapsedSinceTeardown });
     const id = setTimeout(() => {
       console.log("[SCANNER-DEBUG] mount effect: mounting CameraView", { camKey: camKey + 1 });
       setCamKey((k) => k + 1);
       setCamMountReady(true);
-    }, 300);
+    }, delay);
     return () => clearTimeout(id);
     // width/height intentionally excluded — see comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -410,6 +423,16 @@ function AdminPanel() {
 
   return (
     <View testID="admin-panel" style={styles.container}>
+      {/* Stopgap: expo-camera's native preview defaults to a SurfaceView-backed
+          PreviewView (CameraX PERFORMANCE mode), which is documented to render
+          black when mounted while an ancestor view is (or was recently)
+          subject to an opacity/alpha animation — exactly what the Stack's
+          global `animation: "fade"` does on every route push. Disabling the
+          transition for this specific route removes that interaction. This
+          does not fix the underlying SurfaceView fragility (see the native
+          patch tracked separately to force TextureView via
+          ImplementationMode.COMPATIBLE) — it only removes one known trigger. */}
+      <Stack.Screen options={{ animation: "none" }} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
           <Pressable testID="admin-back-btn" onPress={() => router.back()} style={styles.iconBtn}>
