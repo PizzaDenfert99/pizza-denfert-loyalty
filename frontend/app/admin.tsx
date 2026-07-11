@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef }from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView, Platform, KeyboardAvoidingView, Linking, useWindowDimensions } from "react-native";
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView, Platform, KeyboardAvoidingView, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -41,63 +41,15 @@ function AdminPanel() {
 
   // Scanner state
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanning, setScanning] = useState(false);
-  const lastScanRef = useRef<{ data: string; at: number } | null>(null);
-  // Timestamp of the current camKey's mount — lets handleBarcode reject
-  // decode events that arrive right after a remount, which we suspect are
-  // stale reads queued by the PREVIOUS (just-torn-down) camera session.
-  const camMountTimeRef = useRef<number>(0);
-  // Always-current permission snapshot for the retry loop below — reading
-  // this instead of the closed-over `permission` avoids acting on a stale
-  // value across a multi-second retry chain.
-  const permissionRef = useRef(permission);
-  useEffect(() => { permissionRef.current = permission; }, [permission]);
-  // Camera-session gating to fix the "black preview on first open" bug:
-  //  - isFocused: only mount the camera when this screen is actually focused
-  //  - camMountReady: wait out the route fade transition before mounting the
-  //    native CameraView (mounting mid-transition yields a black surface)
-  //  - cameraReady: onCameraReady fired → hide the loading spinner
-  //  - camKey: bump to force a brand-new camera session each scan cycle
-  //
-  // isFocused is debounced (isFocusedRaw -> isFocused below) because we've
-  // seen repeated "scanner effect (re)armed" / mount-teardown cycles every
-  // ~7-15s in the field with no in-app trigger (no poll/interval touches
-  // `user` or `customer` while sitting on this screen) — the only remaining
-  // suspect is react-navigation's focus event stream itself flapping
-  // (activity pause/resume, a transient overlay, etc., outside this file's
-  // control). Previously ANY blur, even a 1-frame blip, synchronously tore
-  // down a perfectly working camera session. Now a blur only counts once
-  // it's been sustained for 1.5s — a real navigation-away still tears down
-  // correctly, but a transient blip no longer nukes the camera.
-  const isFocusedRaw = useIsFocused();
-  const [isFocused, setIsFocusedDebounced] = useState(isFocusedRaw);
-  const focusBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (isFocusedRaw) {
-      if (focusBlurTimerRef.current) { clearTimeout(focusBlurTimerRef.current); focusBlurTimerRef.current = null; }
-      setIsFocusedDebounced(true);
-      return;
-    }
-    console.log("[SCANNER-DEBUG] isFocused went false, debouncing 1500ms before treating as real blur");
-    focusBlurTimerRef.current = setTimeout(() => {
-      console.log("[SCANNER-DEBUG] isFocused false sustained 1500ms, treating as real blur");
-      setIsFocusedDebounced(false);
-    }, 1500);
-    return () => { if (focusBlurTimerRef.current) clearTimeout(focusBlurTimerRef.current); };
-  }, [isFocusedRaw]);
-  const [camMountReady, setCamMountReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [camKey, setCamKey] = useState(0);
-  useEffect(() => { camMountTimeRef.current = Date.now(); }, [camKey]);
-  // Window size drives the remount-on-change fix below — see the mount effect
-  // for why the camera needs to react to this, not just focus/permission.
-  const { width, height } = useWindowDimensions();
+  // Ignore an identical decode arriving within 3s of the last one — the
+  // camera reports several frames a second while pointed at the same code.
+  const lastScanRef = useRef<{ data: string; at: number } | null>(null);
+  // Only run the camera while this screen is actually visible.
+  const isFocused = useIsFocused();
 
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchInput, setSearchInput] = useState("");
-  const [showManualSearch, setShowManualSearch] = useState(false);
   const [pendingQty, setPendingQty] = useState<number>(1);     // staff dials this up/down then confirms
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,139 +75,6 @@ function AdminPanel() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // Scanner is the PRIMARY workflow: auto-open the camera the moment an admin
-  // lands on the dashboard (native AND web — Android tablet browsers support
-  // the camera via getUserMedia + BarcodeDetector for QR), and re-arm it
-  // whenever the staff finishes with a customer so the next scan is instant.
-  //
-  // Previous version gated retries behind a `permissionRequested` boolean that
-  // was BOTH written inside this effect AND listed in its own dependency
-  // array: setPermissionRequested(true) triggered an immediate rerun, whose
-  // cleanup killed the in-flight request's `active` flag before the real OS
-  // dialog (waiting on a human tap) resolved — silently discarding a grant
-  // that arrived a moment later — and left `permissionRequested` latched
-  // `true` forever with no retry path. The only way out was the "clear
-  // customer" button, which manually reset that flag and read the (already
-  // updated) permission state itself. Fixed here by driving retries from an
-  // internal delay loop instead of the dependency array, and reading
-  // permission state from a ref (permissionRef) so a retry a second later
-  // isn't acting on a stale closed-over value.
-  // Tracks the previous {user, customer, isFocused} so every re-arm of this
-  // effect logs EXACTLY which dependency changed, instead of just a value
-  // dump — root-causing recurring "re-armed every 7-15s" reports needs to
-  // say definitively "isFocused flipped" vs. "user reference changed" rather
-  // than requiring us to infer it from two consecutive log lines.
-  const armEffectPrevDepsRef = useRef({ user, customer, isFocused });
-  useEffect(() => {
-    const prevDeps = armEffectPrevDepsRef.current;
-    const changedDeps: string[] = [];
-    if (prevDeps.user !== user) changedDeps.push("user");
-    if (prevDeps.customer !== customer) changedDeps.push("customer");
-    if (prevDeps.isFocused !== isFocused) changedDeps.push("isFocused");
-    armEffectPrevDepsRef.current = { user, customer, isFocused };
-    console.log("[SCANNER-DEBUG] effect run", { hasUser: !!user, isAdmin: !!user?.is_admin, isLoyalty: isLoyaltyApp(), hasCustomer: !!customer, isFocused, changedDeps: changedDeps.length ? changedDeps : ["initial-mount"] });
-    if (!user || !user.is_admin) { console.log("[SCANNER-DEBUG] bail: no admin user yet"); return; }
-    if (!isLoyaltyApp()) { console.log("[SCANNER-DEBUG] bail: not loyalty app"); return; }
-    if (customer) { console.log("[SCANNER-DEBUG] bail: viewing a customer"); return; } // viewing a customer — pause scanning
-    if (!isFocused) { console.log("[SCANNER-DEBUG] bail: screen not focused yet"); return; }
-
-    let cancelled = false;
-    let retryId: ReturnType<typeof setTimeout>;
-
-    const attempt = (delayMs: number) => {
-      retryId = setTimeout(async () => {
-        if (cancelled) return;
-        const p = permissionRef.current;
-        console.log("[SCANNER-DEBUG] attempt", { granted: p?.granted, canAskAgain: p?.canAskAgain, scanning });
-        if (p?.granted) {
-          console.log("[SCANNER-DEBUG] already granted -> setScanning(true)");
-          setScanning(true);
-          return;
-        }
-        if (p && !p.canAskAgain) {
-          console.log("[SCANNER-DEBUG] permanently blocked, stopping retry loop");
-          return; // hard-denied — staff must use the "open settings" CTA
-        }
-        try {
-          console.log("[SCANNER-DEBUG] calling requestPermission()");
-          const r = await requestPermission();
-          if (cancelled) return;
-          console.log("[SCANNER-DEBUG] requestPermission() resolved", { granted: r.granted, canAskAgain: r.canAskAgain });
-          if (r.granted) {
-            setScanning(true);
-            return;
-          }
-          if (r.canAskAgain) attempt(1500); // not a hard deny — retry shortly
-        } catch (e) {
-          console.log("[SCANNER-DEBUG] requestPermission() threw", e);
-          if (!cancelled) attempt(1500);
-        }
-      }, delayMs);
-    };
-
-    console.log("[SCANNER-DEBUG] scanner effect (re)armed", { isFocused, customer: !!customer, scanning });
-    attempt(350);
-    return () => { cancelled = true; clearTimeout(retryId); };
-  }, [user, customer, isFocused]);
-
-  // Mount the native CameraView only AFTER the screen is focused and the route
-  // fade transition has settled. Mounting it synchronously on first render (or
-  // mid-transition) is what produced the black preview that only recovered
-  // after navigating away and back. We also bump `camKey` so every scan cycle
-  // gets a fresh camera session, and reset readiness when scanning stops.
-  //
-  // Split into two effects (initial mount vs. resize self-heal) because a
-  // single effect keyed on `[..., width, height]` let a kiosk→admin nav-bar
-  // resize (kiosk.tsx's unmount cleanup restores the status/nav bars it
-  // hides) repeatedly cancel-and-reschedule the mount timer before it ever
-  // fired — camMountReady stayed false forever and the screen stayed
-  // permanently black. This effect owns ONLY the initial mount and ignores
-  // width/height so nothing can block it from completing.
-  const lastTeardownAtRef = useRef<number>(0);
-  useEffect(() => {
-    if (!(scanning && isFocused && permission?.granted && !customer)) {
-      console.log("[SCANNER-DEBUG] mount effect: conditions not met, tearing down", { scanning, isFocused, granted: permission?.granted, hasCustomer: !!customer });
-      lastTeardownAtRef.current = Date.now();
-      setCamMountReady(false);
-      setCameraReady(false);
-      return;
-    }
-    setCameraReady(false);
-    // Stopgap for a suspected Camera2/CameraX timing race: reopening the
-    // camera before the previous session's hardware teardown has actually
-    // finished at the OS level can produce a preview that reports ready
-    // (onCameraReady fires) but never renders a frame — reportedly fixed,
-    // once, by a workaround (search a customer, then clear it) whose only
-    // clear difference from a plain stop/reopen was several real seconds
-    // elapsing before the camera reopened. Enforce that gap explicitly
-    // instead of relying on it happening by accident.
-    const MIN_REOPEN_GAP_MS = 1200;
-    const elapsedSinceTeardown = Date.now() - lastTeardownAtRef.current;
-    const delay = Math.max(300, MIN_REOPEN_GAP_MS - elapsedSinceTeardown);
-    console.log("[SCANNER-DEBUG] mount effect: scheduling camera mount", { delay, elapsedSinceTeardown });
-    const id = setTimeout(() => {
-      console.log("[SCANNER-DEBUG] mount effect: mounting CameraView", { camKey: camKey + 1 });
-      setCamKey((k) => k + 1);
-      setCamMountReady(true);
-    }, delay);
-    return () => clearTimeout(id);
-    // width/height intentionally excluded — see comment above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanning, isFocused, permission?.granted, customer]);
-
-  // Self-heal an ALREADY-mounted camera when the window resizes (device
-  // rotation, or the kiosk→admin nav-bar reveal landing after mount instead
-  // of before it) — bump camKey to force a fresh native Surface sized for
-  // the new dimensions. Deliberately separate from the initial-mount effect
-  // above so resize events can't block the first mount from ever happening.
-  useEffect(() => {
-    if (!camMountReady) return;
-    console.log("[SCANNER-DEBUG] resize effect: remounting live camera for new dimensions", { width, height });
-    setCameraReady(false);
-    setCamKey((k) => k + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height]);
-
   const submitLogin = async () => {
     setAuthErr(null);
     setAuthLoading(true);
@@ -271,7 +90,6 @@ function AdminPanel() {
   const processQR = useCallback(async (qr: string) => {
     setError(null);
     setBusy(true);
-    setScanning(false);
     setPendingQty(1);
     try {
       const c = await api.adminScan(qr);
@@ -289,14 +107,6 @@ function AdminPanel() {
 
   const handleBarcode = (event: { data: string }) => {
     const now = Date.now();
-    console.log("[SCANNER-DEBUG] onBarcodeScanned fired", { data: event.data, camKey, msSinceCamMount: now - camMountTimeRef.current });
-    // Guard against stale decodes queued by the PREVIOUS camera session that
-    // land just after a fresh camKey mounts — these were pausing `scanning`
-    // (via processQR) before the new session ever produced a real frame.
-    if (now - camMountTimeRef.current < 1000) {
-      console.log("[SCANNER-DEBUG] ignoring barcode: too soon after camKey mount");
-      return;
-    }
     if (lastScanRef.current && lastScanRef.current.data === event.data && (now - lastScanRef.current.at) < 3000) return;
     lastScanRef.current = { data: event.data, at: now };
     processQR(event.data);
@@ -329,44 +139,6 @@ function AdminPanel() {
       setError(lang === "fr" ? "Erreur" : "Failed");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const onSearchPress = async () => {
-    const q = searchInput.trim();
-    if (!q) return;
-    if (q.includes("PIZZA-DENFERT:")) {
-      processQR(q);
-      setSearchInput("");
-      return;
-    }
-    setBusy(true); setError(null);
-    try {
-      const results = await api.adminSearch(q);
-      if (results.length === 0) {
-        setError(lang === "fr" ? "Aucun client trouvé" : "No customer found");
-      } else if (results.length === 1) {
-        setCustomer(results[0]);
-        setSearchInput("");
-        setScanning(false);
-      } else {
-        setSearchResults(results);
-      }
-    } catch (e: any) {
-      setError(e?.message || "Error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startScan = async () => {
-    if (permission?.granted) { setScanning(true); return; }
-    if (permission?.canAskAgain ?? true) {
-      const r = await requestPermission();
-      if (r.granted) setScanning(true);
-      else if (!r.canAskAgain) setError(lang === "fr" ? "Accès caméra bloqué. Autorisez la caméra dans les réglages du navigateur/app." : "Camera blocked. Allow camera in browser/app settings.");
-    } else {
-      setError(lang === "fr" ? "Accès caméra bloqué. Autorisez la caméra dans les réglages du navigateur/app." : "Camera blocked. Allow camera in browser/app settings.");
     }
   };
 
@@ -423,15 +195,8 @@ function AdminPanel() {
 
   return (
     <View testID="admin-panel" style={styles.container}>
-      {/* Stopgap: expo-camera's native preview defaults to a SurfaceView-backed
-          PreviewView (CameraX PERFORMANCE mode), which is documented to render
-          black when mounted while an ancestor view is (or was recently)
-          subject to an opacity/alpha animation — exactly what the Stack's
-          global `animation: "fade"` does on every route push. Disabling the
-          transition for this specific route removes that interaction. This
-          does not fix the underlying SurfaceView fragility (see the native
-          patch tracked separately to force TextureView via
-          ImplementationMode.COMPATIBLE) — it only removes one known trigger. */}
+      {/* No route transition animation on this screen — avoids mounting the
+          native camera preview mid-fade. */}
       <Stack.Screen options={{ animation: "none" }} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
@@ -452,124 +217,55 @@ function AdminPanel() {
               {isLoyaltyApp() && (
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
-                  {scanning && permission?.granted && isFocused ? (
-                <View style={styles.cameraWrap}>
-                  {camMountReady && (
-                    <CameraView
-                      key={camKey}
-                      style={StyleSheet.absoluteFillObject}
-                      facing="back"
-                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                      onBarcodeScanned={handleBarcode}
-                      onCameraReady={() => { console.log("[SCANNER-DEBUG] CameraView onCameraReady fired", { camKey }); setCameraReady(true); }}
-                      {...(Platform.OS === "web"
-                        ? ({ onBarCodeScanned: handleBarcode, barCodeScannerSettings: { barCodeTypes: ["qr"] } } as any)
-                        : {})}
-                    />
-                  )}
-                  {!cameraReady && (
-                    <View style={styles.cameraLoading} pointerEvents="none">
-                      <ActivityIndicator color={theme.color.brand} />
-                      <Text style={styles.cameraLoadingTxt}>{lang === "fr" ? "Initialisation de la caméra…" : "Starting camera…"}</Text>
+                  {permission?.granted && isFocused ? (
+                    <View style={styles.cameraWrap}>
+                      <CameraView
+                        style={StyleSheet.absoluteFillObject}
+                        facing="back"
+                        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                        onBarcodeScanned={handleBarcode}
+                        onCameraReady={() => setCameraReady(true)}
+                        {...(Platform.OS === "web"
+                          ? ({ onBarCodeScanned: handleBarcode, barCodeScannerSettings: { barCodeTypes: ["qr"] } } as any)
+                          : {})}
+                      />
+                      {!cameraReady && (
+                        <View style={styles.cameraLoading} pointerEvents="none">
+                          <ActivityIndicator color={theme.color.brand} />
+                          <Text style={styles.cameraLoadingTxt}>{lang === "fr" ? "Initialisation de la caméra…" : "Starting camera…"}</Text>
+                        </View>
+                      )}
+                      {cameraReady && <View style={styles.scanFrame} />}
+                      {cameraReady && <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>}
+                    </View>
+                  ) : (
+                    <View style={styles.scanPlaceholder}>
+                      <Feather name="camera" size={40} color={theme.color.brand} />
+                      <Text style={styles.placeholderTxt}>
+                        {permanentlyBlocked
+                          ? (lang === "fr" ? "Caméra bloquée. Autorisez l'accès dans les réglages du navigateur/app." : "Camera blocked. Allow access in browser/app settings.")
+                          : (lang === "fr" ? "Autorisez la caméra pour scanner le QR du client" : "Grant camera access to scan the customer's QR")}
+                      </Text>
+                      {!permanentlyBlocked && (
+                        <Pressable testID="grant-camera-btn" onPress={requestPermission} style={styles.scanCta}>
+                          <Feather name="camera" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Autoriser la caméra" : "Grant camera access"}</Text>
+                        </Pressable>
+                      )}
+                      {permanentlyBlocked && Platform.OS !== "web" && (
+                        <Pressable testID="open-camera-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
+                          <Feather name="settings" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir les réglages" : "Open settings"}</Text>
+                        </Pressable>
+                      )}
+                      {permanentlyBlocked && Platform.OS === "web" && (
+                        <Pressable testID="retry-camera-btn" onPress={requestPermission} style={styles.scanCta}>
+                          <Feather name="refresh-cw" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Réessayer la caméra" : "Retry camera"}</Text>
+                        </Pressable>
+                      )}
                     </View>
                   )}
-                  {cameraReady && <View style={styles.scanFrame} />}
-                  {cameraReady && <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>}
-                  <Pressable testID="stop-scan-btn" onPress={() => setScanning(false)} style={styles.stopScanBtn}>
-                    <Feather name="x" size={18} color={theme.color.onBrandPrimary} />
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.scanPlaceholder}>
-                  <Feather name="camera" size={40} color={theme.color.brand} />
-                  <Text style={styles.placeholderTxt}>
-                    {permanentlyBlocked
-                      ? (lang === "fr" ? "Caméra bloquée. Autorisez l'accès dans les réglages du navigateur/app." : "Camera blocked. Allow access in browser/app settings.")
-                      : (lang === "fr" ? "Scannez le QR de fidélité du client" : "Scan the customer's loyalty QR")}
-                  </Text>
-                  {!permanentlyBlocked && (
-                    <Pressable testID="start-scan-btn" onPress={startScan} style={styles.scanCta}>
-                      <Feather name="maximize" size={16} color={theme.color.onBrandPrimary} />
-                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir le scanner" : "Open scanner"}</Text>
-                    </Pressable>
-                  )}
-                  {permanentlyBlocked && Platform.OS !== "web" && (
-                    <Pressable testID="open-camera-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
-                      <Feather name="settings" size={16} color={theme.color.onBrandPrimary} />
-                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir les réglages" : "Open settings"}</Text>
-                    </Pressable>
-                  )}
-                  {permanentlyBlocked && Platform.OS === "web" && (
-                    <Pressable testID="retry-camera-btn" onPress={startScan} style={styles.scanCta}>
-                      <Feather name="refresh-cw" size={16} color={theme.color.onBrandPrimary} />
-                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Réessayer la caméra" : "Retry camera"}</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
-
-              {/* Fallback only: manual search (QR unreadable). Hidden by default
-                  so the camera stays the primary, fastest workflow. */}
-              <Pressable
-                testID="toggle-manual-search"
-                onPress={() => setShowManualSearch((v) => !v)}
-                style={styles.fallbackToggle}
-              >
-                <Feather name={showManualSearch ? "chevron-up" : "search"} size={14} color={theme.color.muted} />
-                <Text style={styles.fallbackToggleTxt}>
-                  {lang === "fr" ? "QR illisible ? Recherche manuelle" : "Can't scan? Manual search"}
-                </Text>
-              </Pressable>
-
-              {showManualSearch && (
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: theme.space.lg }}>
-                <TextInput
-                  testID="search-input"
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  placeholder={lang === "fr" ? "Téléphone, nom ou QR" : "Phone, name or QR"}
-                  placeholderTextColor={theme.color.muted}
-                  value={searchInput}
-                  onChangeText={setSearchInput}
-                  autoCapitalize="none"
-                  returnKeyType="search"
-                  onSubmitEditing={onSearchPress}
-                  autoFocus
-                />
-                <Pressable
-                  testID="search-btn"
-                  onPress={onSearchPress}
-                  disabled={busy}
-                  style={styles.manualBtn}
-                >
-                  {busy ? <ActivityIndicator color={theme.color.onBrandPrimary} size="small" /> : <Feather name="search" size={18} color={theme.color.onBrandPrimary} />}
-                </Pressable>
-              </View>
-              )}
-
-              {searchResults.length > 0 && (
-                <View style={{ marginBottom: theme.space.lg }}>
-                  {searchResults.map((c: any) => (
-                    <Pressable
-                      key={c.user_id}
-                      testID={`search-result-${c.user_id}`}
-                      onPress={() => { setCustomer(c); setSearchResults([]); setSearchInput(""); setScanning(false); setPendingQty(1); }}
-                      style={styles.searchRow}
-                    >
-                      <View style={styles.avatar}><Text style={styles.avatarTxt}>{c.name?.[0]?.toUpperCase() || "?"}</Text></View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.customerName}>{c.name}</Text>
-                        <Text style={styles.customerEmail}>{c.phone || c.email || "—"} · {c.pizza_count} 🍕 · {c.available_rewards?.length || 0} 🎁</Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color={theme.color.brand} />
-                    </Pressable>
-                  ))}
-                  <Pressable testID="close-results-btn" onPress={() => setSearchResults([])} style={{ paddingVertical: 8 }}>
-                    <Text style={{ color: theme.color.muted, fontSize: 12, textAlign: "center" }}>
-                      {lang === "fr" ? "Fermer les résultats" : "Close results"}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
                 </>
               )}
 
@@ -626,7 +322,7 @@ function AdminPanel() {
                 </View>
                 <Pressable
                   testID="clear-customer-btn"
-                  onPress={() => { setCustomer(null); setError(null); lastScanRef.current = null; if (permission?.granted) setScanning(true); }}
+                  onPress={() => { setCustomer(null); setError(null); lastScanRef.current = null; }}
                   style={styles.iconBtn}
                 >
                   <Feather name="x" size={18} color={theme.color.onSurfaceTertiary} />
@@ -819,12 +515,8 @@ const styles = StyleSheet.create({
   cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#000" },
   scanFrame: { position: "absolute", top: "18%", left: "12%", right: "12%", bottom: "22%", borderWidth: 2, borderColor: theme.color.brand, borderRadius: 12 },
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
-  stopScanBtn: { position: "absolute", top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
-  manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },
   cameraLoadingTxt: { color: theme.color.muted, fontSize: 12, fontWeight: "500" },
-  fallbackToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: theme.space.lg, marginBottom: theme.space.sm },
-  fallbackToggleTxt: { color: theme.color.muted, fontSize: 13, fontWeight: "500", textDecorationLine: "underline" },
   customerHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: theme.space.lg },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   avatarTxt: { color: theme.color.onBrandPrimary, fontSize: 22, fontWeight: "700" },
@@ -859,7 +551,6 @@ const styles = StyleSheet.create({
   pizzaChipTxtActive: { color: theme.color.onBrandPrimary },
   secondaryBtn: { flex: 1, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.color.border, backgroundColor: theme.color.surfaceSecondary },
   secondaryTxt: { color: theme.color.brand, fontSize: 12, fontWeight: "600", letterSpacing: 0.8 },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: theme.radius.md, backgroundColor: theme.color.surfaceSecondary, borderWidth: 1, borderColor: theme.color.border, marginBottom: 8 },
   rewardRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: theme.space.md, borderBottomWidth: 0.5, borderBottomColor: theme.color.divider },
   rewardIcon: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   rewardIconActive: { backgroundColor: theme.color.brand },
