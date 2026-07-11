@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
-index fc56526..2d36301 100644
+index fc56526..b58cace 100644
 --- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
 +++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
 @@ -132,6 +132,14 @@ class ExpoCameraView(
@@ -17,3 +17,26 @@ index fc56526..2d36301 100644
    }
    private val scope = CoroutineScope(Dispatchers.Main)
    private var shouldCreateCamera = false
+@@ -455,8 +463,20 @@ class ExpoCameraView(
+     val useCases = UseCaseGroup.Builder().apply {
+       addUseCase(preview)
+       if (cameraMode == CameraMode.PICTURE) {
+-        imageCaptureUseCase?.let {
+-          addUseCase(it)
++        // Skip ImageCapture while actively barcode-scanning: Preview +
++        // ImageCapture + ImageAnalysis is 3 concurrent CameraX streams, which
++        // is not a guaranteed configuration on LEGACY-hardware-level camera2
++        // devices (common on budget/tablet hardware) — some such devices
++        // accept the bindToLifecycle() call without throwing but then never
++        // deliver frames to one of the three surfaces, producing a preview
++        // that reaches CameraState.OPEN (so onCameraReady still fires) yet
++        // stays permanently black. Dropping the unused 3rd stream here keeps
++        // scanning within the 2-stream guarantee. ImageCapture is still built
++        // and bound normally for non-scanning picture-mode use.
++        if (!shouldScanBarcodes) {
++          imageCaptureUseCase?.let {
++            addUseCase(it)
++          }
+         }
+         imageAnalysisUseCase?.let {
+           addUseCase(it)
