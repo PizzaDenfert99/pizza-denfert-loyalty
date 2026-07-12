@@ -16,6 +16,16 @@ export default function AdminSettingsRoute() {
   return <AdminSettings />;
 }
 
+// Per-screen decorative backgrounds on the customer app — independent of the
+// home hero image, uploaded/replaced the same way (same endpoint/pattern).
+type BgKey = "home" | "reservations" | "account" | "menu";
+const BG_FIELDS: { key: BgKey; itemId: string; field: string; labelFr: string; labelEn: string }[] = [
+  { key: "home", itemId: "bg_home", field: "bg_home_url", labelFr: "Arrière-plan Accueil", labelEn: "Home background" },
+  { key: "reservations", itemId: "bg_reservations", field: "bg_reservations_url", labelFr: "Arrière-plan Réservations", labelEn: "Reservations background" },
+  { key: "account", itemId: "bg_account", field: "bg_account_url", labelFr: "Arrière-plan Compte", labelEn: "Account background" },
+  { key: "menu", itemId: "bg_menu", field: "bg_menu_url", labelFr: "Arrière-plan Menu", labelEn: "Menu background" },
+];
+
 function AdminSettings() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -33,6 +43,11 @@ function AdminSettings() {
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroErr, setHeroErr] = useState<string | null>(null);
   const [heroSavedAt, setHeroSavedAt] = useState<Date | null>(null);
+
+  const [bgUrls, setBgUrls] = useState<Record<BgKey, string | null>>({ home: null, reservations: null, account: null, menu: null });
+  const [bgUploading, setBgUploading] = useState<Record<BgKey, boolean>>({ home: false, reservations: false, account: false, menu: false });
+  const [bgErr, setBgErr] = useState<Record<BgKey, string | null>>({ home: null, reservations: null, account: null, menu: null });
+  const [bgSavedAt, setBgSavedAt] = useState<Record<BgKey, Date | null>>({ home: null, reservations: null, account: null, menu: null });
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +67,12 @@ function AdminSettings() {
       const s = await api.adminCmsGetSettings();
       setSettingsId(s.id);
       setHeroImageUrl(s.hero_image_url || null);
+      setBgUrls({
+        home: s.bg_home_url || null,
+        reservations: s.bg_reservations_url || null,
+        account: s.bg_account_url || null,
+        menu: s.bg_menu_url || null,
+      });
     } catch {
       // silent — the capacity card above already surfaces a load error if auth is the issue.
     }
@@ -62,21 +83,82 @@ function AdminSettings() {
   }, [user, load, loadHero]);
 
   const pickHeroImage = async () => {
-    const picked = await pickImageFromGallery();
+    let picked: Awaited<ReturnType<typeof pickImageFromGallery>>;
+    try {
+      picked = await pickImageFromGallery();
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] stage=pick failed", { name: e?.name, message: e?.message, stack: e?.stack });
+      setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
+      return;
+    }
     if (!picked) return;
     setHeroErr(null);
     setHeroSavedAt(null);
     setHeroUploading(true);
+
+    let url: string;
     try {
-      const { url } = await api.adminCmsUploadImage("hero", picked, "original");
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload start", { settingsId, name: picked.name, type: picked.type, size: picked.size, uri: picked.uri });
+      const res = await api.adminCmsUploadImage("hero", picked, "original");
+      url = res.url;
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload ok", { url });
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload failed", { name: e?.name, message: e?.message, stack: e?.stack });
+      setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
+      setHeroUploading(false);
+      return;
+    }
+
+    try {
       if (!settingsId) throw new Error("no settings row");
       await api.adminCmsUpdateSettings(settingsId, { hero_image_url: url });
       setHeroImageUrl(url);
       setHeroSavedAt(new Date());
     } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] stage=save-settings failed", { name: e?.name, message: e?.message, stack: e?.stack });
       setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
     } finally {
       setHeroUploading(false);
+    }
+  };
+
+  const pickBgImage = async (cfg: (typeof BG_FIELDS)[number]) => {
+    let picked: Awaited<ReturnType<typeof pickImageFromGallery>>;
+    try {
+      picked = await pickImageFromGallery();
+    } catch (e: any) {
+      console.log(`[BG-UPLOAD-DEBUG:${cfg.key}] stage=pick failed`, { name: e?.name, message: e?.message, stack: e?.stack });
+      setBgErr((s) => ({ ...s, [cfg.key]: lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry" }));
+      return;
+    }
+    if (!picked) return;
+    setBgErr((s) => ({ ...s, [cfg.key]: null }));
+    setBgSavedAt((s) => ({ ...s, [cfg.key]: null }));
+    setBgUploading((s) => ({ ...s, [cfg.key]: true }));
+
+    let url: string;
+    try {
+      console.log(`[BG-UPLOAD-DEBUG:${cfg.key}] stage=upload start`, { settingsId, name: picked.name, type: picked.type, size: picked.size, uri: picked.uri });
+      const res = await api.adminCmsUploadImage(cfg.itemId, picked, "original");
+      url = res.url;
+      console.log(`[BG-UPLOAD-DEBUG:${cfg.key}] stage=upload ok`, { url });
+    } catch (e: any) {
+      console.log(`[BG-UPLOAD-DEBUG:${cfg.key}] stage=upload failed`, { name: e?.name, message: e?.message, stack: e?.stack });
+      setBgErr((s) => ({ ...s, [cfg.key]: lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry" }));
+      setBgUploading((s) => ({ ...s, [cfg.key]: false }));
+      return;
+    }
+
+    try {
+      if (!settingsId) throw new Error("no settings row");
+      await api.adminCmsUpdateSettings(settingsId, { [cfg.field]: url });
+      setBgUrls((s) => ({ ...s, [cfg.key]: url }));
+      setBgSavedAt((s) => ({ ...s, [cfg.key]: new Date() }));
+    } catch (e: any) {
+      console.log(`[BG-UPLOAD-DEBUG:${cfg.key}] stage=save-settings failed`, { name: e?.name, message: e?.message, stack: e?.stack });
+      setBgErr((s) => ({ ...s, [cfg.key]: lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry" }));
+    } finally {
+      setBgUploading((s) => ({ ...s, [cfg.key]: false }));
     }
   };
 
@@ -223,6 +305,50 @@ function AdminSettings() {
               )}
             </View>
 
+            <View style={[styles.card, { marginTop: theme.space.md }]}>
+              <View style={styles.cardHead}>
+                <View style={styles.cardIcon}><Feather name="layers" size={18} color={theme.color.brand} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardName}>{lang === "fr" ? "Arrière-plans des écrans" : "Screen backgrounds"}</Text>
+                  <Text style={styles.cardSub}>
+                    {lang === "fr"
+                      ? "Image de fond derrière le contenu de chaque écran client (effet parallaxe au défilement)"
+                      : "Backdrop image behind each customer screen's content (parallax on scroll)"}
+                  </Text>
+                </View>
+              </View>
+              {BG_FIELDS.map((cfg, i) => (
+                <View key={cfg.key} style={i > 0 ? styles.bgRow : undefined}>
+                  <Text style={styles.bgLabel}>{lang === "fr" ? cfg.labelFr : cfg.labelEn}</Text>
+                  {!!bgUrls[cfg.key] && (
+                    <Image source={{ uri: bgUrls[cfg.key]! }} style={styles.heroPreview} resizeMode="cover" />
+                  )}
+                  <Pressable
+                    testID={`bg-${cfg.key}-pick-btn`}
+                    onPress={() => pickBgImage(cfg)}
+                    disabled={bgUploading[cfg.key]}
+                    style={styles.heroPickBtn}
+                  >
+                    {bgUploading[cfg.key] ? <ActivityIndicator color={theme.color.brand} /> : (
+                      <>
+                        <Feather name="upload" size={14} color={theme.color.brand} />
+                        <Text style={styles.heroPickTxt}>
+                          {bgUrls[cfg.key] ? (lang === "fr" ? "Remplacer l'image" : "Replace image") : (lang === "fr" ? "Choisir une image" : "Choose image")}
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                  {bgErr[cfg.key] && <Text testID={`bg-${cfg.key}-error`} style={styles.err}>{bgErr[cfg.key]}</Text>}
+                  {bgSavedAt[cfg.key] && !bgErr[cfg.key] && (
+                    <View testID={`bg-${cfg.key}-saved`} style={styles.savedBox}>
+                      <Feather name="check-circle" size={14} color={theme.color.success} />
+                      <Text style={styles.savedTxt}>{lang === "fr" ? "Image mise à jour" : "Image updated"}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+
             {err && <Text testID="settings-error" style={styles.err}>{err}</Text>}
             {savedAt && !err && (
               <View testID="settings-saved" style={styles.savedBox}>
@@ -272,4 +398,6 @@ const styles = StyleSheet.create({
   heroPreview: { width: "100%", height: 140, borderRadius: theme.radius.md, marginTop: theme.space.sm, marginBottom: theme.space.sm, backgroundColor: theme.color.surface },
   heroPickBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.color.brand, backgroundColor: "rgba(212,175,55,0.06)" },
   heroPickTxt: { color: theme.color.brand, fontSize: 13, fontWeight: "600" },
+  bgRow: { marginTop: theme.space.lg, paddingTop: theme.space.lg, borderTopWidth: 1, borderTopColor: theme.color.border },
+  bgLabel: { color: theme.color.onSurface, fontSize: 13, fontWeight: "600", marginBottom: theme.space.sm },
 });

@@ -48,6 +48,27 @@ function AdminPanel() {
   // Only run the camera while this screen is actually visible.
   const isFocused = useIsFocused();
 
+  // Pragmatic self-heal for the black-preview-on-fresh-open bug: on affected
+  // tablets the native preview surface can bind before its host view's first
+  // real layout pass lands, so it reports ready (onCameraReady fires) but
+  // never paints. Manually opening/closing the phone-search panel reliably
+  // "wakes" a frozen preview — it forces a real relayout pass over the
+  // camera wrapper. Automate that exact nudge (a 1px height bump and back)
+  // shortly after onCameraReady instead of requiring the manual workaround.
+  const [camNudge, setCamNudge] = useState(false);
+  useEffect(() => {
+    if (!cameraReady) return;
+    let revertTimer: ReturnType<typeof setTimeout> | null = null;
+    const wakeTimer = setTimeout(() => {
+      setCamNudge(true);
+      revertTimer = setTimeout(() => setCamNudge(false), 120);
+    }, 800);
+    return () => {
+      clearTimeout(wakeTimer);
+      if (revertTimer) clearTimeout(revertTimer);
+    };
+  }, [cameraReady]);
+
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -250,7 +271,7 @@ function AdminPanel() {
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
                   {permission?.granted && isFocused ? (
-                    <View style={styles.cameraWrap}>
+                    <View style={[styles.cameraWrap, camNudge && { height: 341 }]}>
                       <CameraView
                         style={StyleSheet.absoluteFillObject}
                         facing="back"
@@ -607,7 +628,7 @@ const styles = StyleSheet.create({
   placeholderTxt: { color: theme.color.onSurfaceTertiary, fontSize: 13, textAlign: "center", lineHeight: 18 },
   scanCta: { flexDirection: "row", gap: 8, paddingHorizontal: 22, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center", marginTop: theme.space.md },
   scanCtaTxt: { color: theme.color.onBrandPrimary, fontWeight: "700", letterSpacing: 1, fontSize: 13 },
-  cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#000" },
+  cameraWrap: { width: "100%", height: 340, backgroundColor: "#000" },
   scanFrame: { position: "absolute", top: "18%", left: "12%", right: "12%", bottom: "22%", borderWidth: 2, borderColor: theme.color.brand, borderRadius: 12 },
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
   cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },

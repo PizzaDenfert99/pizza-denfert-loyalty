@@ -2028,7 +2028,7 @@ async def public_restaurant_settings():
         r = await cli.get(
             f"{SUPABASE_URL}/rest/v1/restaurant_settings",
             headers=headers,
-            params={"select": "opening_hours,phone,address,hero_image_url,updated_at", "limit": "1"},
+            params={"select": "opening_hours,phone,address,hero_image_url,bg_home_url,bg_reservations_url,bg_account_url,bg_menu_url,updated_at", "limit": "1"},
         )
     if r.status_code >= 400:
         raise HTTPException(502, f"Supabase restaurant_settings fetch failed: {r.status_code} {r.text[:300]}")
@@ -2089,6 +2089,11 @@ class CmsSettingsUpdate(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     hero_image_url: Optional[str] = None
+    # Per-screen decorative backgrounds (customer app) — independent of hero_image_url.
+    bg_home_url: Optional[str] = None
+    bg_reservations_url: Optional[str] = None
+    bg_account_url: Optional[str] = None
+    bg_menu_url: Optional[str] = None
 
 
 async def _sb_rest(method: str, path: str, **kwargs) -> httpx.Response:

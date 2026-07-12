@@ -12,6 +12,12 @@ if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.h
     BASE = "https://api.pizzadenfert.fr";
   }
 }
+// On native, EXPO_PUBLIC_BACKEND_URL is baked into the JS bundle at BUILD time (eas build/update),
+// not read at runtime — an APK built from an older profile (e.g. "preview"/"development", which
+// point at the Emergent preview backend, not "production") will silently keep hitting that stale
+// URL forever regardless of what .env says today. Log it once so a wrong-backend install shows up
+// immediately in adb logcat instead of masquerading as an upload/auth bug.
+console.log("[HERO-UPLOAD-DEBUG] api.ts BASE resolved to", BASE, "platform:", Platform.OS);
 
 let _token: string | null = null;
 export async function loadToken() {
@@ -147,22 +153,57 @@ export const api = {
     req(`/admin/cms/restaurant-settings/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   adminCmsUploadImage: async (
     itemId: string,
-    file: { name: string; type: string; blob?: Blob } & Partial<Blob>,
+    file: { name: string; type: string; uri?: string; blob?: Blob } & Partial<Blob>,
     kind: "original" | "thumb" = "original",
   ): Promise<{ url: string }> => {
     const form = new FormData();
     form.append("item_id", itemId);
     form.append("kind", kind);
-    form.append("file", (file.blob || (file as any)) as any, file.name);
+    // On native, stream directly from the local uri instead of re-sending a
+    // Blob that was itself produced by fetch(uri).blob() — round-tripping a
+    // local file through two fetch() calls (once to read it, once to upload
+    // it) is a known-unreliable pattern on React Native/Android and can fail
+    // the upload outright on some devices even though the read succeeded.
+    // RN's fetch/FormData natively streams file contents from this
+    // {uri, name, type} shape without an intermediate JS-side Blob.
+    if (Platform.OS !== "web" && (file as any).uri) {
+      form.append("file", { uri: (file as any).uri, name: file.name, type: file.type } as any);
+    } else {
+      form.append("file", (file.blob || (file as any)) as any, file.name);
+    }
     const tok = await loadToken();
     const headers: any = {};
     if (tok) headers["Authorization"] = `Bearer ${tok}`;
-    const r = await fetch(`${BASE}/api/admin/cms/upload-image`, { method: "POST", headers, body: form });
+    const url = `${BASE}/api/admin/cms/upload-image`;
+    console.log("[HERO-UPLOAD-DEBUG] uploading", { BASE, url, itemId, kind, name: file.name, type: file.type, hasToken: !!tok, platform: Platform.OS, tokLen: tok?.length ?? 0 });
+    // 20s timeout so a request that silently hangs (bad wifi, MTU issues with
+    // large multipart bodies, etc.) surfaces as a clear timeout log instead of
+    // an indefinite spinner with no diagnostic trail.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    let r: Response;
+    const t0 = Date.now();
+    try {
+      r = await fetch(url, { method: "POST", headers, body: form, signal: ctrl.signal });
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] fetch threw", { name: e?.name, message: e?.message, ms: Date.now() - t0 });
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+    const contentType = r.headers.get("content-type") || "";
+    console.log("[HERO-UPLOAD-DEBUG] response", { status: r.status, ok: r.ok, contentType, ms: Date.now() - t0 });
+    const txt = await r.text();
     if (!r.ok) {
-      const txt = await r.text();
+      console.log("[HERO-UPLOAD-DEBUG] error body", txt.slice(0, 500));
       throw new Error(`${r.status}: ${txt}`);
     }
-    return r.json();
+    try {
+      return JSON.parse(txt);
+    } catch {
+      console.log("[HERO-UPLOAD-DEBUG] response ok but not JSON", { contentType, body: txt.slice(0, 500) });
+      throw new Error(`Upload succeeded but response wasn't JSON (content-type: ${contentType})`);
+    }
   },
 };
 
