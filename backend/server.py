@@ -29,6 +29,7 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 # endpoint returns a friendly 503 instead of crashing.
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or ""
+SUPABASE_ANON_KEY = (os.environ.get("SUPABASE_ANON_KEY") or "").strip()
 
 # ---- SMS / OTP provider configuration ----------------------------------------
 # DEMO MODE (default): SMS_PROVIDER empty/none → the OTP code is returned in the
@@ -204,6 +205,12 @@ class AdminPizzaInExt(BaseModel):
 
 # ---- Kiosk / Advertising Management ----
 AD_SECTIONS = ("loyalty", "experience", "ingredients")
+# Per-slide style customization: kept optional everywhere so the 14 pre-existing
+# slides (created before this feature) keep rendering with kiosk.tsx's built-in
+# defaults — they simply have none of these fields set.
+AD_EFFECTS = ("kenburns", "wave", "rotate", "slide", "fade", "none")
+AD_FONTS = ("System", "PlayfairDisplay_600SemiBold", "DancingScript_600SemiBold")
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 class AdSlideIn(BaseModel):
@@ -214,6 +221,10 @@ class AdSlideIn(BaseModel):
     image_url: Optional[str] = ""
     duration_ms: int = 5000
     active: bool = True
+    background_color: Optional[str] = None  # hex, e.g. "#1a1a1a"
+    font_family: Optional[str] = None        # one of AD_FONTS
+    font_color: Optional[str] = None         # hex, e.g. "#ffffff"
+    effect_type: Optional[str] = None        # one of AD_EFFECTS
 
 
 class AdSlideUpdateIn(BaseModel):
@@ -224,6 +235,23 @@ class AdSlideUpdateIn(BaseModel):
     image_url: Optional[str] = None
     duration_ms: Optional[int] = None
     active: Optional[bool] = None
+    background_color: Optional[str] = None
+    font_family: Optional[str] = None
+    font_color: Optional[str] = None
+    effect_type: Optional[str] = None
+
+
+def _validate_slide_style(background_color: Optional[str], font_family: Optional[str],
+                           font_color: Optional[str], effect_type: Optional[str]) -> None:
+    """Empty string means 'clear override, fall back to default' — only non-empty values are validated."""
+    if background_color and not _HEX_COLOR_RE.match(background_color):
+        raise HTTPException(400, "background_color must be a hex color like #1a1a1a")
+    if font_color and not _HEX_COLOR_RE.match(font_color):
+        raise HTTPException(400, "font_color must be a hex color like #ffffff")
+    if font_family and font_family not in AD_FONTS:
+        raise HTTPException(400, f"Invalid font_family. Allowed: {', '.join(AD_FONTS)}")
+    if effect_type and effect_type not in AD_EFFECTS:
+        raise HTTPException(400, f"Invalid effect_type. Allowed: {', '.join(AD_EFFECTS)}")
 
 
 class AdReorderIn(BaseModel):
@@ -457,9 +485,75 @@ async def logout(authorization: Optional[str] = Header(None)):
         await db.user_sessions.delete_one({"session_token": authorization.replace("Bearer ", "", 1)})
     return {"ok": True}
 
-# Menu (public)
+
+# ===== SUPABASE_MENU_READTHROUGH_v1 =====
+# CMS (/admin-cms) writes menu items to Supabase. This read-through makes the
+# public /api/menu and /api/menu/version return the SAME data the CMS edits,
+# so the customer app instantly sees CMS changes. Falls back to Mongo when
+# Supabase is unavailable so nothing ever hard-breaks.
+_SUPA_CATS_CACHE = {"at": 0.0, "map": {}}   # 5-min TTL for slug lookup
+
+async def _fetch_menu_from_supabase():
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return None
+    import time as _time
+    headers = {"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}"}
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as cli:
+            if _time.time() - _SUPA_CATS_CACHE["at"] > 300:
+                cr = await cli.get(f"{SUPABASE_URL}/rest/v1/categories?select=id,slug&is_active=eq.true", headers=headers)
+                if cr.status_code == 200:
+                    _SUPA_CATS_CACHE["map"] = {c["id"]: c["slug"] for c in cr.json()}
+                    _SUPA_CATS_CACHE["at"] = _time.time()
+            cat_map = _SUPA_CATS_CACHE["map"]
+            mr = await cli.get(
+                f"{SUPABASE_URL}/rest/v1/menu_items"
+                "?select=id,name,description,ingredients,prices,image_url,thumbnail_url,"
+                "category_id,sort_order,is_active,updated_at"
+                "&is_active=eq.true&order=sort_order.asc",
+                headers=headers,
+            )
+            if mr.status_code != 200:
+                log.warning(f"Supabase /menu_items GET returned {mr.status_code}: {mr.text[:200]}")
+                return None
+            raw = mr.json()
+    except Exception as e:
+        log.warning(f"Supabase read-through failed, falling back to Mongo: {e}")
+        return None
+    out = []
+    for it in raw:
+        desc = it.get("description") or ""
+        ing_list = it.get("ingredients") or []
+        ing_txt = ", ".join(ing_list) if isinstance(ing_list, list) else str(ing_list)
+        prices = it.get("prices") or {}
+        price_default = None
+        if isinstance(prices, dict) and prices:
+            try:
+                price_default = float(min(float(v) for v in prices.values() if v is not None))
+            except Exception:
+                price_default = None
+        out.append({
+            "id": it.get("id"),
+            "category": cat_map.get(it.get("category_id"), ""),
+            "name": it.get("name") or "",
+            "desc_fr": desc,
+            "desc_en": desc,
+            "ingredients_fr": ing_txt,
+            "ingredients_en": ing_txt,
+            "image": it.get("image_url") or it.get("thumbnail_url") or "",
+            "price": price_default,
+            "prices": prices if isinstance(prices, dict) else None,
+            "updated_at": it.get("updated_at"),
+        })
+    return out
+# ===== /SUPABASE_MENU_READTHROUGH_v1 =====
+
+# Menu (public) — Supabase read-through with Mongo fallback
 @api.get("/menu")
 async def menu():
+    items = await _fetch_menu_from_supabase()
+    if items is not None:
+        return items
     return await db.menu.find({}, {"_id": 0}).to_list(500)
 
 
@@ -475,9 +569,18 @@ async def _bump_menu_rev() -> int:
 
 @api.get("/menu/version")
 async def menu_version():
-    """Tiny endpoint the customer apps poll to know when to refetch the menu.
-    Returns a monotonically increasing `rev` (bumped on every CMS menu write)
-    plus the live item count, so a changed value = the menu changed."""
+    """Version indicator polled by the customer app; changes iff menu changes.
+    Prefers Supabase (source of truth). Falls back to Mongo meta rev."""
+    items = await _fetch_menu_from_supabase()
+    if items is not None:
+        import hashlib as _mv_h
+        blob = _json.dumps(items, sort_keys=True, default=str)
+        latest = [i.get("updated_at") for i in items if i.get("updated_at")]
+        return {
+            "rev": _mv_h.sha256(blob.encode()).hexdigest()[:16],
+            "count": len(items),
+            "updated_at": max(latest) if latest else None,
+        }
     meta = await db.meta.find_one({"_id": "menu"}, {"_id": 0})
     count = await db.menu.count_documents({})
     return {"rev": int((meta or {}).get("rev", 0)), "count": count,
@@ -1757,6 +1860,7 @@ async def admin_create_slide(b: AdSlideIn, authorization: Optional[str] = Header
         raise HTTPException(400, f"Invalid section. Allowed: {', '.join(AD_SECTIONS)}")
     if b.duration_ms < 500 or b.duration_ms > 60000:
         raise HTTPException(400, "duration_ms must be between 500 and 60000")
+    _validate_slide_style(b.background_color, b.font_family, b.font_color, b.effect_type)
     order = b.order
     if order is None:
         # Append: max order in section + 1
@@ -1771,6 +1875,10 @@ async def admin_create_slide(b: AdSlideIn, authorization: Optional[str] = Header
         "created_at": now(), "updated_at": now(),
         "created_by": me.get("user_id"),
     }
+    if b.background_color is not None: doc["background_color"] = b.background_color
+    if b.font_family is not None: doc["font_family"] = b.font_family
+    if b.font_color is not None: doc["font_color"] = b.font_color
+    if b.effect_type is not None: doc["effect_type"] = b.effect_type
     await db.ad_slides.insert_one(dict(doc))
     return _serialise_slide(doc)
 
@@ -1792,6 +1900,11 @@ async def admin_update_slide(sid: str, b: AdSlideUpdateIn, authorization: Option
             raise HTTPException(400, "duration_ms must be between 500 and 60000")
         update["duration_ms"] = int(b.duration_ms)
     if b.active is not None: update["active"] = bool(b.active)
+    _validate_slide_style(b.background_color, b.font_family, b.font_color, b.effect_type)
+    if b.background_color is not None: update["background_color"] = b.background_color
+    if b.font_family is not None: update["font_family"] = b.font_family
+    if b.font_color is not None: update["font_color"] = b.font_color
+    if b.effect_type is not None: update["effect_type"] = b.effect_type
     r = await db.ad_slides.update_one({"id": sid}, {"$set": update})
     if r.matched_count == 0:
         raise HTTPException(404, "Slide not found")

@@ -107,7 +107,7 @@ export const api = {
   // Kiosk / Advertising Management
   publicAdSlides: () => req("/ads/slides"),
   adminListAdSlides: () => req("/admin/ads/slides"),
-  adminCreateAdSlide: (data: { section: "loyalty"|"experience"|"ingredients"; title: string; subtitle?: string; image_url?: string; duration_ms?: number; active?: boolean; order?: number }) =>
+  adminCreateAdSlide: (data: { section: "loyalty"|"experience"|"ingredients"; title: string; subtitle?: string; image_url?: string; duration_ms?: number; active?: boolean; order?: number; background_color?: string; font_family?: string; font_color?: string; effect_type?: string }) =>
     req("/admin/ads/slides", { method: "POST", body: JSON.stringify(data) }),
   adminUpdateAdSlide: (id: string, patch: any) =>
     req(`/admin/ads/slides/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),

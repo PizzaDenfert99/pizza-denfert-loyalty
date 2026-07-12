@@ -1,0 +1,314 @@
+INFO:     Started server process [40586]
+INFO:     Waiting for application startup.
+INFO:denfert:Menu already has 21 items — skipping seed (Supabase owns the live menu)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57116 - "GET /api/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45794 - "GET / HTTP/1.1" 200 OK
+INFO:     87.89.152.32:59315 - "GET /docs HTTP/1.1" 200 OK
+INFO:     87.89.152.32:59315 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     87.89.152.32:43482 - "GET /docs HTTP/1.1" 200 OK
+INFO:     87.89.152.32:43498 - "GET /openapi.json HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:denfert:Seeded 14 default kiosk slides
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:denfert:OTP for 0631271738: 157206
+INFO:     87.89.152.32:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     66.132.172.200:40158 - "GET / HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/menu HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.200:7240 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.172.200:7256 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.200:7260 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.172.200:7268 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.172.200:7272 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.172.200:7284 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.200:36242 - "GET /login HTTP/1.1" 404 Not Found
+INFO:     152.32.135.151:2502 - "GET /api/v2/heartbeat HTTP/1.1" 404 Not Found
+INFO:     152.32.135.151:2602 - "GET / HTTP/1.1" 200 OK
+INFO:     152.32.135.151:3296 - "GET / HTTP/1.1" 200 OK
+INFO:     152.32.135.151:3402 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     176.65.149.236:17403 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.172.136:64496 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.136:40272 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.172.136:64704 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.136:64718 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.172.136:64754 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.172.136:64770 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.172.136:64786 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.136:15134 - "GET /security.txt HTTP/1.1" 404 Not Found
+INFO:     66.132.224.86:20118 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.86:48472 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.224.86:48482 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.86:48496 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.224.86:48528 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.224.86:48538 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.224.86:48552 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.86:63066 - "GET /.well-known/security.txt HTTP/1.1" 404 Not Found
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     87.89.152.32:0 - "GET /api/ads/slides HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     167.94.146.58:30130 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     167.94.146.58:28170 - "GET / HTTP/1.1" 200 OK
+INFO:     167.94.146.58:28174 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     167.94.146.58:28178 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     167.94.146.58:28200 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     167.94.146.58:28202 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     167.94.146.58:28216 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     167.94.146.58:19702 - "GET /security.txt HTTP/1.1" 404 Not Found
+INFO:     199.45.155.82:33100 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     199.45.155.82:40710 - "GET / HTTP/1.1" 200 OK
+INFO:     199.45.155.82:40722 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     199.45.155.82:40728 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     199.45.155.82:40738 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     199.45.155.82:40762 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     199.45.155.82:40770 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     199.45.155.82:47238 - "GET /robots.txt HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     85.217.149.6:46856 - "GET / HTTP/1.1" 200 OK
+INFO:     85.217.149.72:46370 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58962 - "GET /api/healthz HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     94.231.206.128:49311 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.224.227:41642 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.227:20266 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.224.227:21464 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.224.227:31322 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.224.227:31366 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.224.227:31376 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.227:5814 - "GET /robots.txt HTTP/1.1" 404 Not Found
+INFO:     94.231.206.158:39843 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     102.129.156.48:40485 - "GET /.env HTTP/1.1" 404 Not Found
+INFO:     102.129.156.48:6170 - "GET /.env.local HTTP/1.1" 404 Not Found
+INFO:     161.97.148.236:33306 - "GET / HTTP/1.1" 200 OK
+INFO:     161.97.148.236:33306 - "GET /_profiler/phpinfo HTTP/1.1" 404 Not Found
+INFO:     161.97.148.236:33306 - "GET /_profiler/latest HTTP/1.1" 404 Not Found
+INFO:     161.97.148.236:33306 - "GET /_profiler/empty/search/results?limit=10 HTTP/1.1" 404 Not Found
+INFO:     161.97.148.236:33306 - "GET /_profiler HTTP/1.1" 404 Not Found
+INFO:     161.97.148.236:33306 - "GET /_profiler/ HTTP/1.1" 404 Not Found
+INFO:     147.185.132.216:61524 - "GET / HTTP/1.1" 200 OK
+INFO:     69.5.169.238:4128 - "GET / HTTP/1.1" 200 OK
+INFO:     69.5.169.207:15778 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     69.5.169.249:10312 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     69.5.169.220:8842 - "POST / HTTP/1.1" 405 Method Not Allowed
+INFO:     69.5.169.243:4650 - "GET /sse HTTP/1.1" 404 Not Found
+INFO:     185.247.137.140:41173 - "GET / HTTP/1.1" 200 OK
+INFO:     204.76.203.214:59646 - "CONNECT proxy2.proxiesfood.com%3A443 HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     204.76.203.212:29926 - "CONNECT proxy2.proxiesfood.com%3A443 HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     204.76.203.213:9170 - "CONNECT proxy2.proxiesfood.com%3A443 HTTP/1.1" 404 Not Found
+INFO:     64.62.156.80:58406 - "GET / HTTP/1.1" 200 OK
+INFO:     64.62.156.85:16235 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     64.62.156.91:63453 - "GET http%3A//api.ipify.org/?format=json HTTP/1.1" 404 Not Found
+INFO:     64.62.156.84:21865 - "CONNECT www.shadowserver.org%3A443 HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     18.116.101.220:13826 - "GET / HTTP/1.1" 200 OK
+INFO:     3.130.168.2:33450 - "GET / HTTP/1.1" 200 OK
+INFO:     3.130.168.2:11008 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     205.210.31.194:61866 - "GET /metrics HTTP/1.1" 404 Not Found
+INFO:     121.189.221.35:50116 - "GET / HTTP/1.0" 200 OK
+INFO:     147.185.132.162:62480 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     205.210.31.229:60158 - "GET /metrics HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/healthz HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000099: 652789
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/staff HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/dashboard?period=all HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/admin/customer/add-pizza HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000099: 697404
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:denfert:OTP for +33600000099: 810928
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/admin/customer/add-pizza HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000099: 378462
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/reservations HTTP/1.1" 422 Unprocessable Content
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations?period=upcoming HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "PATCH /api/admin/reservations/ HTTP/1.1" 307 Temporary Redirect
+INFO:denfert:OTP for +33600000099: 108516
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/reservations HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations?period=upcoming HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "PATCH /api/admin/reservations/5dbf5f86-822e-41d1-b03a-4614c9a84e79 HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/healthz HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000099: 597259
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/reservations HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations?period=upcoming HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "PATCH /api/admin/reservations/2d07a5bf-0f2f-45e3-81c4-4dae15c3d6b1 HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/admin/customer/add-pizza HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/admin/menu HTTP/1.1" 422 Unprocessable Content
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "PATCH /api/admin/menu/p-margherita HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "PATCH /api/admin/menu/p-margherita HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000033: 804396
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/admin/customer/add-pizza HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:denfert:OTP for +33600000099: 507776
+INFO:     34.16.56.64:0 - "POST /api/auth/otp/request HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/reservations/availability?date=2026-07-01&time=19:30 HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/healthz HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/admin/staff HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/admin/dashboard HTTP/1.1" 401 Unauthorized
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/loyalty/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/reservations/me HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/reservations HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/staff HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/admin/dashboard HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     91.230.168.126:40887 - "GET / HTTP/1.1" 200 OK
+INFO:     91.230.168.128:60197 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     147.185.132.82:62670 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.224.232:39778 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.232:38024 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.224.232:38028 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.232:23458 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.224.232:23460 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.224.232:36854 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.224.232:36858 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.224.232:29494 - "GET /security.txt HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     159.223.132.86:0 - "POST /api/graphql HTTP/1.1" 404 Not Found
+INFO:     159.223.132.86:0 - "POST /api/gql HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     34.16.56.64:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     34.16.56.64:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     34.16.56.64:0 - "GET /api/health HTTP/1.1" 404 Not Found
+INFO:     66.132.195.117:38598 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.117:12508 - "GET / HTTP/1.1" 200 OK
+INFO:     66.132.195.117:12516 - "PRI %2A HTTP/2.0" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.117:11056 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.195.117:11058 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.195.117:11062 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.195.117:11064 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.117:30328 - "GET /wiki HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/healthz HTTP/1.1" 200 OK
+INFO:     149.154.161.232:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     5.61.209.224:55358 - "GET /../../../../../../etc/passwd HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     205.210.31.229:64416 - "GET /metrics HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40100 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu/version HTTP/1.1" 404 Not Found
+INFO:     178.104.58.91:0 - "GET /api/menu HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [40586]

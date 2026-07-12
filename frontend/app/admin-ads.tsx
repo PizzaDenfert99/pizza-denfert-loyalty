@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Platform, Switch, Image } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Platform, Switch, Image, Animated, Easing } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, Redirect } from "expo-router";
@@ -11,13 +11,29 @@ import { pickImageFromGallery } from "@/src/imagePicker";
 import { isLoyaltyApp } from "@/src/appMode";
 
 type Slide = { id: string; section: string; order: number; title: string; subtitle?: string;
-  image_url: string; duration_ms: number; active: boolean };
+  image_url: string; duration_ms: number; active: boolean;
+  background_color?: string; font_family?: string; font_color?: string; effect_type?: string };
 type Settings = { idle_seconds: number; loop: boolean; default_duration_ms: number; show_section_titles: boolean };
 
 const SECTIONS = [
   { key: "loyalty", fr: "Club Fidélité" },
   { key: "experience", fr: "Expérience" },
   { key: "ingredients", fr: "Ingrédients" },
+];
+
+// Must mirror AD_FONTS / AD_EFFECTS in backend/server.py.
+const FONT_OPTIONS = [
+  { key: "System", label: "Système" },
+  { key: "PlayfairDisplay_600SemiBold", label: "Serif élégant" },
+  { key: "DancingScript_600SemiBold", label: "Manuscrit" },
+];
+const EFFECT_OPTIONS = [
+  { key: "kenburns", label: "Zoom (Ken Burns)" },
+  { key: "wave", label: "Vague" },
+  { key: "rotate", label: "Rotation" },
+  { key: "slide", label: "Panoramique" },
+  { key: "fade", label: "Fondu" },
+  { key: "none", label: "Aucun" },
 ];
 
 // Page-level guard: ad management lives on the loyalty tablet only.
@@ -155,6 +171,12 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Per-slide style — all optional; empty string means "use kiosk default".
+  const [backgroundColor, setBackgroundColor] = useState(slide.background_color || "");
+  const [fontFamily, setFontFamily] = useState(slide.font_family || "");
+  const [fontColor, setFontColor] = useState(slide.font_color || "");
+  const [effectType, setEffectType] = useState(slide.effect_type || "");
+
   const handlePick = async () => {
     const picked = await pickImageFromGallery();
     if (!picked) return;
@@ -175,10 +197,22 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
     } finally { setUploading(false); }
   };
 
+  const bgValid = backgroundColor === "" || /^#[0-9A-Fa-f]{6}$/.test(backgroundColor);
+  const fontColorValid = fontColor === "" || /^#[0-9A-Fa-f]{6}$/.test(fontColor);
+
   const save = async () => {
+    if (!bgValid || !fontColorValid) {
+      onToast(lang === "fr" ? "Couleur invalide (format #RRGGBB)" : "Invalid color (format #RRGGBB)");
+      return;
+    }
     setSaving(true);
     try {
-      await api.adminUpdateAdSlide(slide.id, { title, subtitle, image_url: imageUrl, duration_ms: Math.max(500, parseInt(durationS, 10) * 1000 || 5000), active });
+      await api.adminUpdateAdSlide(slide.id, {
+        title, subtitle, image_url: imageUrl,
+        duration_ms: Math.max(500, parseInt(durationS, 10) * 1000 || 5000), active,
+        background_color: backgroundColor, font_family: fontFamily,
+        font_color: fontColor, effect_type: effectType,
+      });
       onToast(lang === "fr" ? "Enregistré" : "Saved");
       onSaved();
     } catch (e: any) { onToast(e?.message || "Échec"); }
@@ -216,6 +250,41 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
             {uploading ? <ActivityIndicator color={theme.color.brand} /> : <><Feather name="image" size={14} color={theme.color.brand} /><Text style={s.secondaryBtnTxt}>{imageUrl ? (lang === "fr" ? "Remplacer" : "Replace") : (lang === "fr" ? "Choisir une image" : "Choose image")}</Text></>}
           </Pressable>
 
+          <Text style={[s.sectionLbl, { marginTop: 20, marginBottom: 8 }]}>{lang === "fr" ? "STYLE DU SLIDE (OPTIONNEL)" : "SLIDE STYLE (OPTIONAL)"}</Text>
+
+          <StylePreview
+            imageUrl={imageUrl}
+            title={title}
+            subtitle={subtitle}
+            backgroundColor={bgValid ? backgroundColor : ""}
+            fontFamily={fontFamily}
+            fontColor={fontColorValid ? fontColor : ""}
+            effectType={effectType}
+          />
+
+          <HexColorField
+            label={lang === "fr" ? "Couleur de fond" : "Background color"}
+            value={backgroundColor}
+            onChange={setBackgroundColor}
+            valid={bgValid}
+            placeholder="#1a1a1a"
+            testID="bg-color-input"
+          />
+          <HexColorField
+            label={lang === "fr" ? "Couleur du texte" : "Text color"}
+            value={fontColor}
+            onChange={setFontColor}
+            valid={fontColorValid}
+            placeholder="#ffffff"
+            testID="font-color-input"
+          />
+
+          <Text style={s.fieldLbl}>{lang === "fr" ? "Police" : "Font"}</Text>
+          <ChipRow options={FONT_OPTIONS} value={fontFamily} onChange={setFontFamily} testIDPrefix="font" />
+
+          <Text style={s.fieldLbl}>{lang === "fr" ? "Animation" : "Effect"}</Text>
+          <ChipRow options={EFFECT_OPTIONS} value={effectType} onChange={setEffectType} testIDPrefix="effect" />
+
           <Pressable testID="save-slide" onPress={save} disabled={saving} style={[s.primaryBtn, saving && { opacity: 0.6 }]}>
             {saving ? <ActivityIndicator color={theme.color.onBrandPrimary} /> : <Text style={s.primaryBtnTxt}>{lang === "fr" ? "Enregistrer" : "Save"}</Text>}
           </Pressable>
@@ -224,6 +293,121 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
             <Text style={s.dangerBtnTxt}>{lang === "fr" ? "Supprimer" : "Delete"}</Text>
           </Pressable>
         </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+function HexColorField({ label, value, onChange, valid, placeholder, testID }: {
+  label: string; value: string; onChange: (v: string) => void; valid: boolean; placeholder: string; testID: string;
+}) {
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={s.fieldLbl}>{label}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={[s.swatch, { backgroundColor: valid && value ? value : theme.color.surfaceTertiary }]} />
+        <TextInput
+          testID={testID}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={theme.color.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[s.input, { flex: 1 }, !valid && s.inputError]}
+        />
+        {!!value && (
+          <Pressable testID={`${testID}-clear`} onPress={() => onChange("")} style={s.iconBtn}>
+            <Feather name="x" size={14} color={theme.color.muted} />
+          </Pressable>
+        )}
+      </View>
+      {!valid && <Text style={s.errorTxt}>{"Format attendu: #RRGGBB"}</Text>}
+    </View>
+  );
+}
+
+function ChipRow({ options, value, onChange, testIDPrefix }: {
+  options: { key: string; label: string }[]; value: string; onChange: (v: string) => void; testIDPrefix: string;
+}) {
+  return (
+    <View style={s.chipRow}>
+      {options.map(o => {
+        const selected = value === o.key;
+        return (
+          <Pressable
+            key={o.key}
+            testID={`${testIDPrefix}-${o.key}`}
+            onPress={() => onChange(selected ? "" : o.key)}
+            style={[s.chip, selected && s.chipActive]}
+          >
+            <Text style={[s.chipTxt, selected && s.chipTxtActive]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// Lightweight looping version of the kiosk's per-slide effects, so the admin can
+// see roughly how the motion will look without leaving the editor.
+function StylePreview({ imageUrl, title, subtitle, backgroundColor, fontFamily, fontColor, effectType }: {
+  imageUrl: string; title: string; subtitle: string; backgroundColor: string; fontFamily: string; fontColor: string; effectType: string;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    anim.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(anim, { toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true })
+    );
+    if (effectType && effectType !== "none" && effectType !== "fade") loop.start();
+    return () => loop.stop();
+  }, [effectType]);
+
+  let imgStyle: any = {};
+  switch (effectType) {
+    case "kenburns":
+      imgStyle = { transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1.14] }) }] };
+      break;
+    case "wave":
+      imgStyle = { transform: [
+        { scale: 1.06 },
+        { translateX: anim.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: [0, 6, 0, -6, 0] }) },
+      ] };
+      break;
+    case "rotate":
+      imgStyle = { transform: [
+        { scale: 1.08 },
+        { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ["-2deg", "2deg"] }) },
+      ] };
+      break;
+    case "slide":
+      imgStyle = { transform: [
+        { scale: 1.12 },
+        { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-14, 14] }) },
+      ] };
+      break;
+    default:
+      imgStyle = {};
+  }
+
+  return (
+    <View style={[s.previewBox, { backgroundColor: backgroundColor || theme.color.surfaceTertiary }]}>
+      {imageUrl ? (
+        <Animated.View style={[StyleSheet.absoluteFill, imgStyle]}>
+          <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        </Animated.View>
+      ) : null}
+      <View style={[StyleSheet.absoluteFill, s.previewOverlay]}>
+        <Text numberOfLines={2} style={[s.previewTitle, !!fontFamily && { fontFamily }, !!fontColor && { color: fontColor }]}>
+          {title || "Titre du slide"}
+        </Text>
+        {!!subtitle && (
+          <Text numberOfLines={2} style={[s.previewSub, !!fontFamily && { fontFamily }, !!fontColor && { color: fontColor }]}>
+            {subtitle}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -267,4 +451,16 @@ const s = StyleSheet.create({
   dangerBtnTxt: { color: "#E74C3C", fontSize: 12, fontWeight: "600" },
   toast: { position: "absolute", left: 16, right: 16, bottom: 24, backgroundColor: theme.color.brand, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
   toastTxt: { color: theme.color.onBrandPrimary, fontWeight: "600", fontSize: 13 },
+  swatch: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderColor: theme.color.borderStrong },
+  inputError: { borderColor: "#E74C3C" },
+  errorTxt: { color: "#E74C3C", fontSize: 11, marginTop: 4 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: theme.color.borderStrong, backgroundColor: theme.color.surfaceSecondary },
+  chipActive: { backgroundColor: theme.color.brand, borderColor: theme.color.brand },
+  chipTxt: { color: theme.color.onSurface, fontSize: 12, fontWeight: "600" },
+  chipTxtActive: { color: theme.color.onBrandPrimary },
+  previewBox: { width: "100%", height: 160, borderRadius: 10, overflow: "hidden", marginTop: 4, marginBottom: 4, justifyContent: "flex-end" },
+  previewOverlay: { justifyContent: "flex-end", padding: 12, backgroundColor: "rgba(0,0,0,0.25)" },
+  previewTitle: { color: "#ffffff", fontSize: 16, fontWeight: "700", textShadowColor: "rgba(0,0,0,0.9)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
+  previewSub: { color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 4, textShadowColor: "rgba(0,0,0,0.9)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
 });
