@@ -50,6 +50,9 @@ function AdminPanel() {
 
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [showManualSearch, setShowManualSearch] = useState(false);
   const [pendingQty, setPendingQty] = useState<number>(1);     // staff dials this up/down then confirms
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +140,32 @@ function AdminPanel() {
       showToast(`+${n} ${lang === "fr" ? "pizza" + (n > 1 ? "s" : "") + " ajoutée" + (n > 1 ? "s" : "") : "pizza" + (n > 1 ? "s" : "") + " added"}`);
     } catch {
       setError(lang === "fr" ? "Erreur" : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSearchPress = async () => {
+    const q = searchInput.trim();
+    if (!q) return;
+    if (q.includes("PIZZA-DENFERT:")) {
+      processQR(q);
+      setSearchInput("");
+      return;
+    }
+    setBusy(true); setError(null);
+    try {
+      const results = await api.adminSearch(q);
+      if (results.length === 0) {
+        setError(lang === "fr" ? "Aucun client trouvé" : "No customer found");
+      } else if (results.length === 1) {
+        setCustomer(results[0]);
+        setSearchInput("");
+      } else {
+        setSearchResults(results);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Error");
     } finally {
       setBusy(false);
     }
@@ -267,6 +296,69 @@ function AdminPanel() {
                           <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Réessayer la caméra" : "Retry camera"}</Text>
                         </Pressable>
                       )}
+                    </View>
+                  )}
+
+                  {/* Fallback only: manual search (QR unreadable). Hidden by default
+                      so the camera stays the primary, fastest workflow. */}
+                  <Pressable
+                    testID="toggle-manual-search"
+                    onPress={() => setShowManualSearch((v) => !v)}
+                    style={styles.fallbackToggle}
+                  >
+                    <Feather name={showManualSearch ? "chevron-up" : "search"} size={14} color={theme.color.muted} />
+                    <Text style={styles.fallbackToggleTxt}>
+                      {lang === "fr" ? "QR illisible ? Recherche manuelle" : "Can't scan? Manual search"}
+                    </Text>
+                  </Pressable>
+
+                  {showManualSearch && (
+                    <View style={{ flexDirection: "row", gap: 8, marginBottom: theme.space.lg }}>
+                      <TextInput
+                        testID="search-input"
+                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                        placeholder={lang === "fr" ? "Téléphone, nom ou QR" : "Phone, name or QR"}
+                        placeholderTextColor={theme.color.muted}
+                        value={searchInput}
+                        onChangeText={setSearchInput}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                        onSubmitEditing={onSearchPress}
+                        autoFocus
+                      />
+                      <Pressable
+                        testID="search-btn"
+                        onPress={onSearchPress}
+                        disabled={busy}
+                        style={styles.manualBtn}
+                      >
+                        {busy ? <ActivityIndicator color={theme.color.onBrandPrimary} size="small" /> : <Feather name="search" size={18} color={theme.color.onBrandPrimary} />}
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {searchResults.length > 0 && (
+                    <View style={{ marginBottom: theme.space.lg }}>
+                      {searchResults.map((c: any) => (
+                        <Pressable
+                          key={c.user_id}
+                          testID={`search-result-${c.user_id}`}
+                          onPress={() => { setCustomer(c); setSearchResults([]); setSearchInput(""); setPendingQty(1); }}
+                          style={styles.searchRow}
+                        >
+                          <View style={styles.avatar}><Text style={styles.avatarTxt}>{c.name?.[0]?.toUpperCase() || "?"}</Text></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.customerName}>{c.name}</Text>
+                            <Text style={styles.customerEmail}>{c.phone || c.email || "—"} · {c.pizza_count} 🍕 · {c.available_rewards?.length || 0} 🎁</Text>
+                          </View>
+                          <Feather name="chevron-right" size={18} color={theme.color.brand} />
+                        </Pressable>
+                      ))}
+                      <Pressable testID="close-results-btn" onPress={() => setSearchResults([])} style={{ paddingVertical: 8 }}>
+                        <Text style={{ color: theme.color.muted, fontSize: 12, textAlign: "center" }}>
+                          {lang === "fr" ? "Fermer les résultats" : "Close results"}
+                        </Text>
+                      </Pressable>
                     </View>
                   )}
                 </>
@@ -515,11 +607,15 @@ const styles = StyleSheet.create({
   placeholderTxt: { color: theme.color.onSurfaceTertiary, fontSize: 13, textAlign: "center", lineHeight: 18 },
   scanCta: { flexDirection: "row", gap: 8, paddingHorizontal: 22, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center", marginTop: theme.space.md },
   scanCtaTxt: { color: theme.color.onBrandPrimary, fontWeight: "700", letterSpacing: 1, fontSize: 13 },
-  cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#FF00FF" },
+  cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#000" },
   scanFrame: { position: "absolute", top: "18%", left: "12%", right: "12%", bottom: "22%", borderWidth: 2, borderColor: theme.color.brand, borderRadius: 12 },
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
   cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },
   cameraLoadingTxt: { color: theme.color.muted, fontSize: 12, fontWeight: "500" },
+  fallbackToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: theme.space.lg, marginBottom: theme.space.sm },
+  fallbackToggleTxt: { color: theme.color.muted, fontSize: 13, fontWeight: "500", textDecorationLine: "underline" },
+  manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: theme.radius.md, backgroundColor: theme.color.surfaceSecondary, borderWidth: 1, borderColor: theme.color.border, marginBottom: 8 },
   customerHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: theme.space.lg },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   avatarTxt: { color: theme.color.onBrandPrimary, fontSize: 22, fontWeight: "700" },
