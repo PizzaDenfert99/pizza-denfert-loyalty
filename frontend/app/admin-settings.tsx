@@ -74,6 +74,7 @@ function AdminSettings() {
       setHeroImageUrl(url);
       setHeroSavedAt(new Date());
     } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] pickHeroImage failed", e?.message || e);
       setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
     } finally {
       setHeroUploading(false);

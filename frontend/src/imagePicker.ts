@@ -10,9 +10,11 @@ export type PickedFile = {
   name: string;
   type: string;
   size: number;
-  /** Blob suitable for `supabase.storage.from(...).upload()`. */
+  /** Blob suitable for local use (e.g. FileReader.readAsDataURL in admin-ads).
+   *  NOT used for network uploads on native — see the note in
+   *  adminCmsUploadImage, which streams from `uri` directly instead. */
   blob: Blob;
-  /** Original URI (file://...) on native, dataURL on web — useful for previews. */
+  /** Original URI (file://... or content://...) on native, dataURL on web. */
   uri: string;
 };
 
@@ -85,14 +87,21 @@ export async function pickImageFromGallery(opts?: {
     return null;
   }
 
-  // 3. Convert the file URI to a Blob so we can stream it to Supabase Storage
-  //    (the storage SDK accepts Blob / ArrayBuffer / File but NOT raw file:// URIs).
+  // 3. Convert the file URI to a Blob for local consumers (e.g. admin-ads'
+  //    FileReader.readAsDataURL). NOT used for network uploads on native —
+  //    round-tripping a local file://... or content://... URI through
+  //    fetch()'s blob conversion and then back out over another fetch() as
+  //    multipart form data is a known-unreliable pattern on React Native/
+  //    Android (some content providers and RN/Hermes versions don't carry
+  //    the bytes through correctly). adminCmsUploadImage streams straight
+  //    from `uri` instead on native.
   const resp = await fetch(a.uri);
   const blob = await resp.blob();
   const mime = a.mimeType || blob.type || "image/jpeg";
   const ext = extFromMime(mime);
   const name = (a.fileName || `photo-${Date.now()}.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
 
+  console.log("[HERO-UPLOAD-DEBUG] picked file", { name, type: mime, size: blob.size || a.fileSize || 0, uri: a.uri });
   return { name, type: mime, size: blob.size || a.fileSize || 0, blob, uri: a.uri };
 }
 

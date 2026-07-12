@@ -147,19 +147,39 @@ export const api = {
     req(`/admin/cms/restaurant-settings/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
   adminCmsUploadImage: async (
     itemId: string,
-    file: { name: string; type: string; blob?: Blob } & Partial<Blob>,
+    file: { name: string; type: string; uri?: string; blob?: Blob } & Partial<Blob>,
     kind: "original" | "thumb" = "original",
   ): Promise<{ url: string }> => {
     const form = new FormData();
     form.append("item_id", itemId);
     form.append("kind", kind);
-    form.append("file", (file.blob || (file as any)) as any, file.name);
+    // On native, stream directly from the local uri instead of re-sending a
+    // Blob that was itself produced by fetch(uri).blob() — round-tripping a
+    // local file through two fetch() calls (once to read it, once to upload
+    // it) is a known-unreliable pattern on React Native/Android and can fail
+    // the upload outright on some devices even though the read succeeded.
+    // RN's fetch/FormData natively streams file contents from this
+    // {uri, name, type} shape without an intermediate JS-side Blob.
+    if (Platform.OS !== "web" && (file as any).uri) {
+      form.append("file", { uri: (file as any).uri, name: file.name, type: file.type } as any);
+    } else {
+      form.append("file", (file.blob || (file as any)) as any, file.name);
+    }
     const tok = await loadToken();
     const headers: any = {};
     if (tok) headers["Authorization"] = `Bearer ${tok}`;
-    const r = await fetch(`${BASE}/api/admin/cms/upload-image`, { method: "POST", headers, body: form });
+    console.log("[HERO-UPLOAD-DEBUG] uploading", { url: `${BASE}/api/admin/cms/upload-image`, itemId, kind, name: file.name, type: file.type, hasToken: !!tok, platform: Platform.OS });
+    let r: Response;
+    try {
+      r = await fetch(`${BASE}/api/admin/cms/upload-image`, { method: "POST", headers, body: form });
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] fetch threw", e?.message || e);
+      throw e;
+    }
+    console.log("[HERO-UPLOAD-DEBUG] response", { status: r.status, ok: r.ok });
     if (!r.ok) {
       const txt = await r.text();
+      console.log("[HERO-UPLOAD-DEBUG] error body", txt);
       throw new Error(`${r.status}: ${txt}`);
     }
     return r.json();
