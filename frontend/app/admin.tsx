@@ -191,6 +191,9 @@ function AdminPanel() {
   }
 
   // ===== Admin logged in: scanner + customer panel =====
+  // TEMP diagnostic: logged directly in the render body (not an effect) so it
+  // fires on every single render, including ones an effect wouldn't catch.
+  console.log("[SCANNER-DEBUG] render", { granted: permission?.granted, isFocused, cameraReady });
   const permanentlyBlocked = permission && !permission.granted && !permission.canAskAgain;
 
   return (
@@ -512,7 +515,7 @@ const styles = StyleSheet.create({
   placeholderTxt: { color: theme.color.onSurfaceTertiary, fontSize: 13, textAlign: "center", lineHeight: 18 },
   scanCta: { flexDirection: "row", gap: 8, paddingHorizontal: 22, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center", marginTop: theme.space.md },
   scanCtaTxt: { color: theme.color.onBrandPrimary, fontWeight: "700", letterSpacing: 1, fontSize: 13 },
-  cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#000" },
+  cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#FF00FF" },
   scanFrame: { position: "absolute", top: "18%", left: "12%", right: "12%", bottom: "22%", borderWidth: 2, borderColor: theme.color.brand, borderRadius: 12 },
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
   cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },

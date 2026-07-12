@@ -1,5 +1,5 @@
 diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
-index fc56526..b58cace 100644
+index fc56526..57cb753 100644
 --- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
 +++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
 @@ -132,6 +132,14 @@ class ExpoCameraView(
@@ -17,7 +17,30 @@ index fc56526..b58cace 100644
    }
    private val scope = CoroutineScope(Dispatchers.Main)
    private var shouldCreateCamera = false
-@@ -455,8 +463,20 @@ class ExpoCameraView(
+@@ -410,6 +418,22 @@ class ExpoCameraView(
+     if (!shouldCreateCamera || previewPaused) {
+       return
+     }
++    if (previewView.width == 0 || previewView.height == 0) {
++      // OnViewDidUpdateProps fires createCamera() as soon as RN applies props,
++      // which can race ahead of this ViewGroup's first layout pass (onLayout
++      // manually sizes previewView separately from normal traversal). Binding
++      // Preview's surfaceProvider while previewView is still 0x0 lets CameraX
++      // reach CameraState.OPEN (onCameraReady still fires) without ever
++      // painting a frame on some devices. Defer until previewView has a real
++      // size instead of binding blind.
++      previewView.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
++        override fun onLayoutChange(v: View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
++          previewView.removeOnLayoutChangeListener(this)
++          scope.launch { createCamera() }
++        }
++      })
++      return
++    }
+     shouldCreateCamera = false
+     val cameraProvider = ProcessCameraProvider.awaitInstance(context)
+ 
+@@ -455,8 +479,20 @@ class ExpoCameraView(
      val useCases = UseCaseGroup.Builder().apply {
        addUseCase(preview)
        if (cameraMode == CameraMode.PICTURE) {
