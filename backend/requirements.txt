@@ -28,5 +28,8 @@ PyJWT==2.13.0
 # HTTP client (SMS providers, Emergent push relay)
 httpx==0.28.1
 
+# Multipart form parsing (CMS image upload)
+python-multipart==0.0.20
+
 # Web push (VAPID)
 pywebpush==2.0.0
