@@ -48,6 +48,27 @@ function AdminPanel() {
   // Only run the camera while this screen is actually visible.
   const isFocused = useIsFocused();
 
+  // Pragmatic self-heal for the black-preview-on-fresh-open bug: on affected
+  // tablets the native preview surface can bind before its host view's first
+  // real layout pass lands, so it reports ready (onCameraReady fires) but
+  // never paints. Manually opening/closing the phone-search panel reliably
+  // "wakes" a frozen preview — it forces a real relayout pass over the
+  // camera wrapper. Automate that exact nudge (a 1px height bump and back)
+  // shortly after onCameraReady instead of requiring the manual workaround.
+  const [camNudge, setCamNudge] = useState(false);
+  useEffect(() => {
+    if (!cameraReady) return;
+    let revertTimer: ReturnType<typeof setTimeout> | null = null;
+    const wakeTimer = setTimeout(() => {
+      setCamNudge(true);
+      revertTimer = setTimeout(() => setCamNudge(false), 120);
+    }, 800);
+    return () => {
+      clearTimeout(wakeTimer);
+      if (revertTimer) clearTimeout(revertTimer);
+    };
+  }, [cameraReady]);
+
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -250,7 +271,7 @@ function AdminPanel() {
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
                   {permission?.granted && isFocused ? (
-                    <View style={styles.cameraWrap}>
+                    <View style={[styles.cameraWrap, camNudge && { height: 341 }]}>
                       <CameraView
                         style={StyleSheet.absoluteFillObject}
                         facing="back"
