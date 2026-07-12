@@ -12,6 +12,12 @@ if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.h
     BASE = "https://api.pizzadenfert.fr";
   }
 }
+// On native, EXPO_PUBLIC_BACKEND_URL is baked into the JS bundle at BUILD time (eas build/update),
+// not read at runtime — an APK built from an older profile (e.g. "preview"/"development", which
+// point at the Emergent preview backend, not "production") will silently keep hitting that stale
+// URL forever regardless of what .env says today. Log it once so a wrong-backend install shows up
+// immediately in adb logcat instead of masquerading as an upload/auth bug.
+console.log("[HERO-UPLOAD-DEBUG] api.ts BASE resolved to", BASE, "platform:", Platform.OS);
 
 let _token: string | null = null;
 export async function loadToken() {
@@ -168,21 +174,36 @@ export const api = {
     const tok = await loadToken();
     const headers: any = {};
     if (tok) headers["Authorization"] = `Bearer ${tok}`;
-    console.log("[HERO-UPLOAD-DEBUG] uploading", { url: `${BASE}/api/admin/cms/upload-image`, itemId, kind, name: file.name, type: file.type, hasToken: !!tok, platform: Platform.OS });
+    const url = `${BASE}/api/admin/cms/upload-image`;
+    console.log("[HERO-UPLOAD-DEBUG] uploading", { BASE, url, itemId, kind, name: file.name, type: file.type, hasToken: !!tok, platform: Platform.OS, tokLen: tok?.length ?? 0 });
+    // 20s timeout so a request that silently hangs (bad wifi, MTU issues with
+    // large multipart bodies, etc.) surfaces as a clear timeout log instead of
+    // an indefinite spinner with no diagnostic trail.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     let r: Response;
+    const t0 = Date.now();
     try {
-      r = await fetch(`${BASE}/api/admin/cms/upload-image`, { method: "POST", headers, body: form });
+      r = await fetch(url, { method: "POST", headers, body: form, signal: ctrl.signal });
     } catch (e: any) {
-      console.log("[HERO-UPLOAD-DEBUG] fetch threw", e?.message || e);
+      console.log("[HERO-UPLOAD-DEBUG] fetch threw", { name: e?.name, message: e?.message, ms: Date.now() - t0 });
       throw e;
+    } finally {
+      clearTimeout(timer);
     }
-    console.log("[HERO-UPLOAD-DEBUG] response", { status: r.status, ok: r.ok });
+    const contentType = r.headers.get("content-type") || "";
+    console.log("[HERO-UPLOAD-DEBUG] response", { status: r.status, ok: r.ok, contentType, ms: Date.now() - t0 });
+    const txt = await r.text();
     if (!r.ok) {
-      const txt = await r.text();
-      console.log("[HERO-UPLOAD-DEBUG] error body", txt);
+      console.log("[HERO-UPLOAD-DEBUG] error body", txt.slice(0, 500));
       throw new Error(`${r.status}: ${txt}`);
     }
-    return r.json();
+    try {
+      return JSON.parse(txt);
+    } catch {
+      console.log("[HERO-UPLOAD-DEBUG] response ok but not JSON", { contentType, body: txt.slice(0, 500) });
+      throw new Error(`Upload succeeded but response wasn't JSON (content-type: ${contentType})`);
+    }
   },
 };
 

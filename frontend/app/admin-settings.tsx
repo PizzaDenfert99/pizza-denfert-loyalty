@@ -62,19 +62,39 @@ function AdminSettings() {
   }, [user, load, loadHero]);
 
   const pickHeroImage = async () => {
-    const picked = await pickImageFromGallery();
+    let picked: Awaited<ReturnType<typeof pickImageFromGallery>>;
+    try {
+      picked = await pickImageFromGallery();
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] stage=pick failed", { name: e?.name, message: e?.message, stack: e?.stack });
+      setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
+      return;
+    }
     if (!picked) return;
     setHeroErr(null);
     setHeroSavedAt(null);
     setHeroUploading(true);
+
+    let url: string;
     try {
-      const { url } = await api.adminCmsUploadImage("hero", picked, "original");
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload start", { settingsId, name: picked.name, type: picked.type, size: picked.size, uri: picked.uri });
+      const res = await api.adminCmsUploadImage("hero", picked, "original");
+      url = res.url;
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload ok", { url });
+    } catch (e: any) {
+      console.log("[HERO-UPLOAD-DEBUG] stage=upload failed", { name: e?.name, message: e?.message, stack: e?.stack });
+      setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
+      setHeroUploading(false);
+      return;
+    }
+
+    try {
       if (!settingsId) throw new Error("no settings row");
       await api.adminCmsUpdateSettings(settingsId, { hero_image_url: url });
       setHeroImageUrl(url);
       setHeroSavedAt(new Date());
     } catch (e: any) {
-      console.log("[HERO-UPLOAD-DEBUG] pickHeroImage failed", e?.message || e);
+      console.log("[HERO-UPLOAD-DEBUG] stage=save-settings failed", { name: e?.name, message: e?.message, stack: e?.stack });
       setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
     } finally {
       setHeroUploading(false);

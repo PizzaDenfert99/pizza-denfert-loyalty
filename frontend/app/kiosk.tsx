@@ -12,6 +12,7 @@ import {
   View, Text, StyleSheet, Pressable, Image, Platform,
   Animated, ActivityIndicator, useWindowDimensions,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import * as NavigationBar from "expo-navigation-bar";
 import { setStatusBarHidden } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -201,11 +202,29 @@ function Kiosk() {
       {/* Background image with cross-fade */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: imgOpacity }]}>
         {cur.image_url ? (
-          <Image
-            source={{ uri: cur.image_url }}
-            style={StyleSheet.absoluteFill}
-            resizeMode={cur.section === "loyalty" ? "contain" : "cover"}
-          />
+          <>
+            {/* Blurred, zoomed copy of the same image fills the frame behind the
+                letterboxed "contain" section so there's no empty bar — the sharp
+                foreground image below is untouched (still "contain", no crop/zoom,
+                no quality loss). "cover" sections already fill the screen, so the
+                blur layer is skipped there — it would be fully hidden anyway. */}
+            {cur.section === "loyalty" && (
+              <ExpoImage
+                source={{ uri: cur.image_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                blurRadius={80}
+              />
+            )}
+            {cur.section === "loyalty" && (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.25)" }]} />
+            )}
+            <Image
+              source={{ uri: cur.image_url }}
+              style={StyleSheet.absoluteFill}
+              resizeMode={cur.section === "loyalty" ? "contain" : "cover"}
+            />
+          </>
         ) : (
           // No image — show gradient background with big title
           <LinearGradient
