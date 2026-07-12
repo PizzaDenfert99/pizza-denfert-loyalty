@@ -9,9 +9,11 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
-  View, Text, StyleSheet, Pressable, Image,
+  View, Text, StyleSheet, Pressable, Image, Platform,
   Animated, Easing, ActivityIndicator, useWindowDimensions,
 } from "react-native";
+import * as NavigationBar from "expo-navigation-bar";
+import { setStatusBarHidden } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, Redirect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -112,6 +114,48 @@ function Kiosk() {
   const effectRun = useRef<Animated.CompositeAnimation | null>(null);
 
   const timer = useRef<any>(null);
+
+  // ── Immersive fullscreen while the kiosk screensaver is on screen ───────────
+  // Hide the status bar and (on Android) the system navigation bar so only the
+  // slides are visible. Both are restored on unmount.
+  //
+  // Re-applied on every dimension change (i.e. device rotation) because Android
+  // re-lays-out the window for the new orientation and can drop the hidden
+  // flag in the process — without this the nav bar came back after a rotate
+  // and stayed that way.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    setStatusBarHidden(true, "fade");
+    if (Platform.OS === "android") {
+      NavigationBar.setBehaviorAsync("overlay-swipe").catch(() => {});
+      NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+    }
+    return () => {
+      setStatusBarHidden(false, "fade");
+      if (Platform.OS === "android") {
+        NavigationBar.setVisibilityAsync("visible").catch(() => {});
+      }
+    };
+  }, [width, height]);
+
+  // ── Keep the nav bar hidden once it's revealed ───────────────────────────────
+  // `setBehaviorAsync` only controls the reveal gesture when edge-to-edge is
+  // disabled; this app runs with `edgeToEdgeEnabled: true` (app.json), so that
+  // call above is a no-op and Android is free to leave the bar up once it's
+  // shown. In portrait the swipe-to-reveal zone sits right behind the kiosk's
+  // own bottom UI (dots row, progress bar, tap hint), so it's far more likely
+  // to get triggered there than in landscape — which is why the bug showed up
+  // as "portrait-only". Listen for reveals and immediately re-hide instead of
+  // depending on the behavior mode.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = NavigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === "visible") {
+        NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // ── Fetch slides ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -242,12 +286,12 @@ function Kiosk() {
         )}
       </Animated.View>
 
-      {/* Dark overlay for non-loyalty sections */}
+      {/* Subtle dark gradient behind the caption text only — photo stays visible */}
       {meta.overlay && (
         <LinearGradient
-          colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.5)", "rgba(0,0,0,0.92)"]}
-          locations={[0, 0.4, 1]}
-          style={StyleSheet.absoluteFill}
+          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.18)", "rgba(0,0,0,0.55)"]}
+          locations={[0, 0.45, 1]}
+          style={s.captionGradient}
         />
       )}
 
@@ -391,6 +435,13 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 40,
     zIndex: 5,
+  },
+  captionGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 320,
   },
   tag: {
     fontSize: 11,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, Pressable, ScrollView, TextInput,
   ActivityIndicator, Platform, KeyboardAvoidingView, Switch, Modal,
@@ -10,22 +10,32 @@ import { useRouter, Redirect } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
-import { pickImageFromGallery } from "@/src/imagePicker";
+import { pickImageFromGallery, PickedFile } from "@/src/imagePicker";
 import { isLoyaltyApp } from "@/src/appMode";
 
+// Menu editing is Supabase-backed (proxied by our own FastAPI admin/cms/* endpoints) —
+// this is the SAME source of truth the customer app reads via /public/menu-items, so
+// edits made here show up immediately on pizzadenfert.fr. The legacy adminListMenu/
+// adminCreateMenuItem/etc. MongoDB endpoints are a dead-end fallback and are
+// deliberately NOT used here anymore.
+type Category = { id: string; name: string; slug: string; sort_order: number; is_active?: boolean };
 type Item = {
   id: string;
-  category: string;
+  category_id: string | null;
   name: string;
-  desc_fr?: string;
-  desc_en?: string;
-  ingredients_fr?: string;
-  ingredients_en?: string;
-  price?: number | null;
+  description?: string | null;
+  ingredients?: string[] | null;
   prices?: Record<string, number> | null;
-  image?: string;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
 };
 
+// Fixed display order + French labels for this screen. Resolved to a real Supabase
+// category id by matching on `name` — NOT `slug`, since slugs can be renamed
+// independently in the CMS (e.g. "salades" -> "salade-italienne" happened in
+// production on 2026-06-15) while the display name stays stable.
 const CATEGORIES = [
   { key: "pizzas", label: "Pizzas" },
   { key: "focaccias", label: "Focaccias" },
@@ -37,14 +47,17 @@ const CATEGORIES = [
 ];
 
 export default function MenuCmsRoute() {
+  console.log("[CMS-DEBUG] MenuCmsRoute rendered, isLoyaltyApp()=", isLoyaltyApp());
   if (!isLoyaltyApp()) return <Redirect href={"/" as any} />;
   return <MenuCms />;
 }
 
 function MenuCms() {
+  console.log("[CMS-DEBUG] MenuCms mounted");
   const router = useRouter();
   const { user, loading } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
   const [busy, setBusy] = useState(true);
   const [editing, setEditing] = useState<Item | null>(null);
   const [creating, setCreating] = useState(false);
@@ -55,8 +68,9 @@ function MenuCms() {
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const rows = await api.adminListMenu();
+      const [rows, catRows] = await Promise.all([api.adminCmsListMenuItems(), api.adminCmsListCategories()]);
       setItems(rows || []);
+      setCats(catRows || []);
     } catch (e: any) {
       showToast(e?.message || "Erreur de chargement");
     } finally {
@@ -65,10 +79,19 @@ function MenuCms() {
   }, []);
 
   useEffect(() => {
+    console.log("[CMS-DEBUG] effect fired, loading=", loading, "user=", user ? { is_admin: user.is_admin } : null);
     if (loading) return;
-    if (!user || !user.is_admin) { router.replace("/admin"); return; }
+    if (!user || !user.is_admin) { console.log("[CMS-DEBUG] bailing: not admin, redirecting to /admin"); router.replace("/admin"); return; }
+    console.log("[CMS-DEBUG] calling refresh()");
     refresh();
   }, [user, loading]);
+
+  // Local category key ("pizzas") -> real Supabase category id, resolved by display name.
+  const catIdByKey = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    for (const c of CATEGORIES) map[c.key] = cats.find((x) => x.name === c.label)?.id;
+    return map;
+  }, [cats]);
 
   if (loading || !user) {
     return <View style={s.center}><ActivityIndicator color={theme.color.brand} /></View>;
@@ -96,24 +119,25 @@ function MenuCms() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: theme.space.lg, paddingBottom: 80 }} showsVerticalScrollIndicator={false}>
           {CATEGORIES.map((c) => {
-            const catItems = items.filter((i) => i.category === c.key);
+            const catId = catIdByKey[c.key];
+            const catItems = items.filter((i) => i.category_id === catId);
             if (catItems.length === 0) return null;
             return (
               <View key={c.key} style={{ marginBottom: theme.space.xl }}>
                 <Text style={s.catTitle}>{c.label} · {catItems.length}</Text>
                 {catItems.map((it) => (
                   <Pressable key={it.id} testID={`cms-item-${it.id}`} onPress={() => setEditing(it)} style={s.itemRow}>
-                    {it.image ? (
-                      <Image source={it.image} style={s.thumb} contentFit="cover" />
+                    {(it.thumbnail_url || it.image_url) ? (
+                      <Image source={it.thumbnail_url || it.image_url!} style={s.thumb} contentFit="cover" />
                     ) : (
                       <View style={[s.thumb, s.thumbEmpty]}><Feather name="image" size={18} color={theme.color.muted} /></View>
                     )}
                     <View style={{ flex: 1 }}>
                       <Text style={s.itemName}>{it.name}</Text>
                       <Text style={s.itemPrice}>
-                        {it.prices
-                          ? Object.entries(it.prices).map(([k, v]) => `${/^\d+$/.test(k) ? k + "cm" : k} ${Number(v).toFixed(2)}€`).join(" · ")
-                          : (typeof it.price === "number" ? `${it.price.toFixed(2)} €` : "—")}
+                        {Object.keys(it.prices || {}).length
+                          ? Object.entries(it.prices!).map(([k, v]) => `${/^\d+$/.test(k) ? k + "cm " : ""}${Number(v).toFixed(2)}€`).join(" · ")
+                          : "—"}
                       </Text>
                     </View>
                     <Feather name="chevron-right" size={18} color={theme.color.muted} />
@@ -131,6 +155,8 @@ function MenuCms() {
       {(editing || creating) && (
         <ItemEditor
           item={editing}
+          catIdByKey={catIdByKey}
+          itemsCount={items.length}
           onClose={() => { setEditing(null); setCreating(false); }}
           onSaved={async () => { setEditing(null); setCreating(false); await refresh(); }}
           onToast={showToast}
@@ -144,34 +170,42 @@ function MenuCms() {
   );
 }
 
-function ItemEditor({ item, onClose, onSaved, onToast }: {
-  item: Item | null; onClose: () => void; onSaved: () => void; onToast: (m: string) => void;
+function ItemEditor({ item, catIdByKey, itemsCount, onClose, onSaved, onToast }: {
+  item: Item | null;
+  catIdByKey: Record<string, string | undefined>;
+  itemsCount: number;
+  onClose: () => void; onSaved: () => void; onToast: (m: string) => void;
 }) {
   const isNew = !item;
-  const [category, setCategory] = useState(item?.category || "pizzas");
+  const initialCategoryKey = useMemo(() => {
+    if (!item) return "pizzas";
+    return CATEGORIES.find((c) => catIdByKey[c.key] === item.category_id)?.key || "pizzas";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [category, setCategory] = useState(initialCategoryKey);
   const [name, setName] = useState(item?.name || "");
-  const [descFr, setDescFr] = useState(item?.desc_fr || "");
-  const [ingFr, setIngFr] = useState(item?.ingredients_fr || "");
-  const [image, setImage] = useState(item?.image || "");
-  const [usePizzaSizes, setUsePizzaSizes] = useState(!!item?.prices);
-  const [price, setPrice] = useState(item?.price != null ? String(item.price) : "");
+  const [descFr, setDescFr] = useState(item?.description || "");
+  const [ingFr, setIngFr] = useState((item?.ingredients || []).join(", "));
+  // `imagePreviewUri` is what's shown on screen (existing remote URL, or a freshly
+  // picked local blob URI). `pendingImage` is only uploaded once the item is saved —
+  // Supabase Storage paths are keyed by the real item id, so a new item must exist
+  // first; this keeps the tablet's existing single-button "pick then Enregistrer" flow.
+  const [imagePreviewUri, setImagePreviewUri] = useState(item?.thumbnail_url || item?.image_url || "");
+  const [pendingImage, setPendingImage] = useState<PickedFile | null>(null);
+  const [usePizzaSizes, setUsePizzaSizes] = useState(item?.prices ? ("26" in item.prices || "31" in item.prices) : false);
+  const [price, setPrice] = useState(item?.prices?.default != null ? String(item.prices.default) : "");
   const [price26, setPrice26] = useState(item?.prices?.["26"] != null ? String(item.prices["26"]) : "");
   const [price31, setPrice31] = useState(item?.prices?.["31"] != null ? String(item.prices["31"]) : "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const pick = async () => {
-    const picked = await pickImageFromGallery();
-    if (!picked) return;
     setUploading(true);
     try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(picked.blob);
-      });
-      setImage(dataUrl);
+      const picked = await pickImageFromGallery();
+      if (!picked) return;
+      setPendingImage(picked);
+      setImagePreviewUri(picked.uri);
     } catch (e: any) {
       onToast(e?.message || "Échec de l'image");
     } finally { setUploading(false); }
@@ -182,21 +216,32 @@ function ItemEditor({ item, onClose, onSaved, onToast }: {
     setSaving(true);
     try {
       const payload: any = {
-        category, name: name.trim(),
-        desc_fr: descFr, desc_en: descFr,
-        ingredients_fr: ingFr, ingredients_en: ingFr,
-        image,
+        category_id: catIdByKey[category] || null,
+        name: name.trim(),
+        description: descFr || null,
+        ingredients: ingFr.split(",").map((x) => x.trim()).filter(Boolean),
       };
       if (usePizzaSizes) {
         payload.prices = { "26": parseFloat(price26) || 0, "31": parseFloat(price31) || 0 };
       } else {
-        payload.price = parseFloat(price) || 0;
+        payload.prices = { default: parseFloat(price) || 0 };
       }
-      if (isNew) {
-        await api.adminCreateMenuItem(payload);
+
+      let savedId = item?.id;
+      if (!savedId) {
+        payload.sort_order = itemsCount;
+        const created = await api.adminCmsCreateMenuItem(payload);
+        savedId = created.id;
       } else {
-        await api.adminUpdateMenuItem(item!.id, payload);
+        await api.adminCmsUpdateMenuItem(savedId, payload);
       }
+
+      // Image upload is a separate step, keyed by the real (now-persisted) item id.
+      if (pendingImage && savedId) {
+        const res = await api.adminCmsUploadImage(savedId, pendingImage, "original");
+        await api.adminCmsUpdateMenuItem(savedId, { image_url: res.url });
+      }
+
       onToast("Enregistré");
       onSaved();
     } catch (e: any) {
@@ -208,7 +253,7 @@ function ItemEditor({ item, onClose, onSaved, onToast }: {
     if (isNew || !item) return;
     setSaving(true);
     try {
-      await api.adminDeleteMenuItem(item.id);
+      await api.adminCmsDeleteMenuItem(item.id);
       onToast("Supprimé");
       onSaved();
     } catch (e: any) {
@@ -220,8 +265,8 @@ function ItemEditor({ item, onClose, onSaved, onToast }: {
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.modalOverlay}>
         <View style={s.modalCard}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flexShrink: 1 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
               <View style={s.modalHead}>
                 <Text style={s.modalTitle}>{isNew ? "Nouveau plat" : "Modifier le plat"}</Text>
                 <Pressable testID="editor-close" onPress={onClose} hitSlop={12}><Feather name="x" size={22} color={theme.color.onSurface} /></Pressable>
@@ -229,8 +274,8 @@ function ItemEditor({ item, onClose, onSaved, onToast }: {
 
               {/* Image */}
               <Pressable testID="editor-pick-image" disabled={uploading} onPress={pick} style={s.imagePick}>
-                {image ? (
-                  <Image source={image} style={s.imagePreview} contentFit="cover" />
+                {imagePreviewUri ? (
+                  <Image source={imagePreviewUri} style={s.imagePreview} contentFit="cover" />
                 ) : (
                   <View style={s.imagePlaceholder}>
                     {uploading ? <ActivityIndicator color={theme.color.brand} /> : (
@@ -318,7 +363,7 @@ const s = StyleSheet.create({
   toast: { position: "absolute", bottom: 30, alignSelf: "center", backgroundColor: theme.color.brand, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
   toastTxt: { color: theme.color.onBrandPrimary, fontWeight: "700", fontSize: 13 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: theme.color.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: theme.space.xl, maxHeight: "92%", borderTopWidth: 1, borderColor: theme.color.borderStrong },
+  modalCard: { backgroundColor: theme.color.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: theme.space.xl, maxHeight: "92%", overflow: "hidden", borderTopWidth: 1, borderColor: theme.color.borderStrong },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: theme.space.lg },
   modalTitle: { color: theme.color.onSurface, fontSize: 22, fontWeight: "300" },
   imagePick: { height: 160, borderRadius: theme.radius.md, overflow: "hidden", marginBottom: theme.space.md, borderWidth: 1, borderColor: theme.color.border, borderStyle: "dashed" },

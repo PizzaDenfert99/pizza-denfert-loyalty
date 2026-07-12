@@ -621,9 +621,9 @@ function CreateReservationModal({ lang, onClose, onCreated, onToast }: {
               <Pressable onPress={onClose} style={s.iconBtn}><Feather name="x" size={18} color={theme.color.onSurface} /></Pressable>
             </View>
             <Text style={s.fieldLbl}>{lang === "fr" ? "Nom" : "Name"}</Text>
-            <TextInput value={name} onChangeText={setName} style={s.input} />
+            <TextInput testID="create-name-input" value={name} onChangeText={setName} style={s.input} />
             <Text style={s.fieldLbl}>{lang === "fr" ? "Téléphone" : "Phone"}</Text>
-            <TextInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={s.input} />
+            <TextInput testID="create-phone-input" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={s.input} />
             <View style={{ flexDirection: "row", gap: 12 }}>
               <View style={{ flex: 1 }}>
                 <Text style={s.fieldLbl}>Date</Text>

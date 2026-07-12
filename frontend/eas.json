@@ -1,0 +1,69 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://denfert-pizzeria.preview.emergentagent.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false },
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://denfert-pizzeria.preview.emergentagent.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" },
+      "ios": { "simulator": false },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.pizzadenfert.fr"
+      }
+    },
+    "production-apk": {
+      "autoIncrement": true,
+      "android": { "buildType": "apk" },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.pizzadenfert.fr"
+      }
+    },
+    "production-loyalty-apk": {
+      "autoIncrement": true,
+      "android": { "buildType": "apk" },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.pizzadenfert.fr",
+        "APP_VARIANT": "loyalty"
+      }
+    },
+    "preview-loyalty-apk": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://denfert-pizzeria.preview.emergentagent.com",
+        "APP_VARIANT": "loyalty"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./play-store-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

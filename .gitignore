@@ -75,6 +75,7 @@ agenthub/agents/youtube/db
 
 # Build caches
 .cache/
+.metro-cache/
 
 memory/test_credentials.md
 
@@ -82,7 +83,10 @@ memory/test_credentials.md
 android-sdk/
 .env
 .env.*
+!.env.example
+!.env.*.example
 *.env
+!.env.example
 credentials.json
 *.key
 .credentials

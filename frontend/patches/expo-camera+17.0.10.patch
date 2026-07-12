@@ -1,0 +1,65 @@
+diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+index fc56526..57cb753 100644
+--- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
++++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+@@ -132,6 +132,14 @@ class ExpoCameraView(
+ 
+   private var previewView = PreviewView(context).apply {
+     elevation = 0f
++    // Force TextureView instead of the default PERFORMANCE mode's SurfaceView.
++    // SurfaceView is composited directly by the OS outside the app's own view
++    // hierarchy, so it does not participate in ancestor alpha/opacity
++    // animations (e.g. a navigator's screen-transition fade) or survive rapid
++    // open/close cycles reliably — both were observed to produce a preview
++    // that reports ready (onCameraReady fires) but never renders a visible
++    // frame. TextureView is immune to both at a negligible perf cost here.
++    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+   }
+   private val scope = CoroutineScope(Dispatchers.Main)
+   private var shouldCreateCamera = false
+@@ -410,6 +418,22 @@ class ExpoCameraView(
+     if (!shouldCreateCamera || previewPaused) {
+       return
+     }
++    if (previewView.width == 0 || previewView.height == 0) {
++      // OnViewDidUpdateProps fires createCamera() as soon as RN applies props,
++      // which can race ahead of this ViewGroup's first layout pass (onLayout
++      // manually sizes previewView separately from normal traversal). Binding
++      // Preview's surfaceProvider while previewView is still 0x0 lets CameraX
++      // reach CameraState.OPEN (onCameraReady still fires) without ever
++      // painting a frame on some devices. Defer until previewView has a real
++      // size instead of binding blind.
++      previewView.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
++        override fun onLayoutChange(v: View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
++          previewView.removeOnLayoutChangeListener(this)
++          scope.launch { createCamera() }
++        }
++      })
++      return
++    }
+     shouldCreateCamera = false
+     val cameraProvider = ProcessCameraProvider.awaitInstance(context)
+ 
+@@ -455,8 +479,20 @@ class ExpoCameraView(
+     val useCases = UseCaseGroup.Builder().apply {
+       addUseCase(preview)
+       if (cameraMode == CameraMode.PICTURE) {
+-        imageCaptureUseCase?.let {
+-          addUseCase(it)
++        // Skip ImageCapture while actively barcode-scanning: Preview +
++        // ImageCapture + ImageAnalysis is 3 concurrent CameraX streams, which
++        // is not a guaranteed configuration on LEGACY-hardware-level camera2
++        // devices (common on budget/tablet hardware) — some such devices
++        // accept the bindToLifecycle() call without throwing but then never
++        // deliver frames to one of the three surfaces, producing a preview
++        // that reaches CameraState.OPEN (so onCameraReady still fires) yet
++        // stays permanently black. Dropping the unused 3rd stream here keeps
++        // scanning within the 2-stream guarantee. ImageCapture is still built
++        // and bound normally for non-scanning picture-mode use.
++        if (!shouldScanBarcodes) {
++          imageCaptureUseCase?.let {
++            addUseCase(it)
++          }
+         }
+         imageAnalysisUseCase?.let {
+           addUseCase(it)

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Scroll
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import { useRouter, Redirect } from "expo-router";
+import { useRouter, Redirect, Stack } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAuth } from "@/src/auth-context";
@@ -41,19 +41,12 @@ function AdminPanel() {
 
   // Scanner state
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanning, setScanning] = useState(false);
-  const [permissionRequested, setPermissionRequested] = useState(false);
-  const lastScanRef = useRef<{ data: string; at: number } | null>(null);
-  // Camera-session gating to fix the "black preview on first open" bug:
-  //  - isFocused: only mount the camera when this screen is actually focused
-  //  - camMountReady: wait out the route fade transition before mounting the
-  //    native CameraView (mounting mid-transition yields a black surface)
-  //  - cameraReady: onCameraReady fired → hide the loading spinner
-  //  - camKey: bump to force a brand-new camera session each scan cycle
-  const isFocused = useIsFocused();
-  const [camMountReady, setCamMountReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [camKey, setCamKey] = useState(0);
+  // Ignore an identical decode arriving within 3s of the last one — the
+  // camera reports several frames a second while pointed at the same code.
+  const lastScanRef = useRef<{ data: string; at: number } | null>(null);
+  // Only run the camera while this screen is actually visible.
+  const isFocused = useIsFocused();
 
   // Customer payload after scan
   const [customer, setCustomer] = useState<any>(null);
@@ -85,50 +78,6 @@ function AdminPanel() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // Scanner is the PRIMARY workflow: auto-open the camera the moment an admin
-  // lands on the dashboard (native only), and re-arm it whenever the staff
-  // finishes with a customer (customer cleared) so the next scan is instant.
-  useEffect(() => {
-    if (!user || !user.is_admin) return;
-    if (Platform.OS === "web") return; // web preview cannot use the native camera
-    if (!isLoyaltyApp()) return;
-    if (customer) return; // viewing a customer — pause scanning
-    (async () => {
-      try {
-        if (permission?.granted) {
-          setScanning(true);
-          return;
-        }
-        if (!permissionRequested && (permission?.canAskAgain ?? true)) {
-          setPermissionRequested(true);
-          const r = await requestPermission();
-          if (r.granted) setScanning(true);
-        }
-      } catch {}
-    })();
-    // requestPermission from useCameraPermissions is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, customer, permission?.granted, permission?.canAskAgain, permissionRequested]);
-
-  // Mount the native CameraView only AFTER the screen is focused and the route
-  // fade transition has settled. Mounting it synchronously on first render (or
-  // mid-transition) is what produced the black preview that only recovered
-  // after navigating away and back. We also bump `camKey` so every scan cycle
-  // gets a fresh camera session, and reset readiness when scanning stops.
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    if (scanning && isFocused && permission?.granted && !customer) {
-      setCameraReady(false);
-      const id = setTimeout(() => {
-        setCamKey((k) => k + 1);
-        setCamMountReady(true);
-      }, 350);
-      return () => clearTimeout(id);
-    }
-    setCamMountReady(false);
-    setCameraReady(false);
-  }, [scanning, isFocused, permission?.granted, customer]);
-
   const submitLogin = async () => {
     setAuthErr(null);
     setAuthLoading(true);
@@ -144,7 +93,6 @@ function AdminPanel() {
   const processQR = useCallback(async (qr: string) => {
     setError(null);
     setBusy(true);
-    setScanning(false);
     setPendingQty(1);
     try {
       const c = await api.adminScan(qr);
@@ -213,7 +161,6 @@ function AdminPanel() {
       } else if (results.length === 1) {
         setCustomer(results[0]);
         setSearchInput("");
-        setScanning(false);
       } else {
         setSearchResults(results);
       }
@@ -221,21 +168,6 @@ function AdminPanel() {
       setError(e?.message || "Error");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const startScan = async () => {
-    if (Platform.OS === "web") {
-      setError(lang === "fr" ? "Caméra non disponible sur le web. Utilisez l'app mobile." : "Camera unavailable on web. Use the mobile app.");
-      return;
-    }
-    if (permission?.granted) { setScanning(true); return; }
-    if (permission?.canAskAgain ?? true) {
-      const r = await requestPermission();
-      if (r.granted) setScanning(true);
-      else if (!r.canAskAgain) setError(lang === "fr" ? "Accès caméra bloqué. Ouvrez les réglages." : "Camera blocked. Open settings.");
-    } else {
-      setError(lang === "fr" ? "Accès caméra bloqué. Ouvrez les réglages." : "Camera blocked. Open settings.");
     }
   };
 
@@ -288,10 +220,16 @@ function AdminPanel() {
   }
 
   // ===== Admin logged in: scanner + customer panel =====
+  // TEMP diagnostic: logged directly in the render body (not an effect) so it
+  // fires on every single render, including ones an effect wouldn't catch.
+  console.log("[SCANNER-DEBUG] render", { granted: permission?.granted, isFocused, cameraReady });
   const permanentlyBlocked = permission && !permission.granted && !permission.canAskAgain;
 
   return (
     <View testID="admin-panel" style={styles.container}>
+      {/* No route transition animation on this screen — avoids mounting the
+          native camera preview mid-fade. */}
+      <Stack.Screen options={{ animation: "none" }} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
           <Pressable testID="admin-back-btn" onPress={() => router.back()} style={styles.iconBtn}>
@@ -311,117 +249,118 @@ function AdminPanel() {
               {isLoyaltyApp() && (
                 <>
                   <Text style={styles.sectionLbl}>{lang === "fr" ? "SCANNER QR CLIENT" : "SCAN CUSTOMER QR"}</Text>
-                  {scanning && Platform.OS !== "web" && permission?.granted && isFocused ? (
-                <View style={styles.cameraWrap}>
-                  {camMountReady && (
-                    <CameraView
-                      key={camKey}
-                      style={StyleSheet.absoluteFillObject}
-                      facing="back"
-                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                      onBarcodeScanned={handleBarcode}
-                      onCameraReady={() => setCameraReady(true)}
-                    />
-                  )}
-                  {!cameraReady && (
-                    <View style={styles.cameraLoading} pointerEvents="none">
-                      <ActivityIndicator color={theme.color.brand} />
-                      <Text style={styles.cameraLoadingTxt}>{lang === "fr" ? "Initialisation de la caméra…" : "Starting camera…"}</Text>
+                  {permission?.granted && isFocused ? (
+                    <View style={styles.cameraWrap}>
+                      <CameraView
+                        style={StyleSheet.absoluteFillObject}
+                        facing="back"
+                        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                        onBarcodeScanned={handleBarcode}
+                        onCameraReady={() => setCameraReady(true)}
+                        {...(Platform.OS === "web"
+                          ? ({ onBarCodeScanned: handleBarcode, barCodeScannerSettings: { barCodeTypes: ["qr"] } } as any)
+                          : {})}
+                      />
+                      {!cameraReady && (
+                        <View style={styles.cameraLoading} pointerEvents="none">
+                          <ActivityIndicator color={theme.color.brand} />
+                          <Text style={styles.cameraLoadingTxt}>{lang === "fr" ? "Initialisation de la caméra…" : "Starting camera…"}</Text>
+                        </View>
+                      )}
+                      {cameraReady && <View style={styles.scanFrame} />}
+                      {cameraReady && <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>}
+                    </View>
+                  ) : (
+                    <View style={styles.scanPlaceholder}>
+                      <Feather name="camera" size={40} color={theme.color.brand} />
+                      <Text style={styles.placeholderTxt}>
+                        {permanentlyBlocked
+                          ? (lang === "fr" ? "Caméra bloquée. Autorisez l'accès dans les réglages du navigateur/app." : "Camera blocked. Allow access in browser/app settings.")
+                          : (lang === "fr" ? "Autorisez la caméra pour scanner le QR du client" : "Grant camera access to scan the customer's QR")}
+                      </Text>
+                      {!permanentlyBlocked && (
+                        <Pressable testID="grant-camera-btn" onPress={requestPermission} style={styles.scanCta}>
+                          <Feather name="camera" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Autoriser la caméra" : "Grant camera access"}</Text>
+                        </Pressable>
+                      )}
+                      {permanentlyBlocked && Platform.OS !== "web" && (
+                        <Pressable testID="open-camera-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
+                          <Feather name="settings" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir les réglages" : "Open settings"}</Text>
+                        </Pressable>
+                      )}
+                      {permanentlyBlocked && Platform.OS === "web" && (
+                        <Pressable testID="retry-camera-btn" onPress={requestPermission} style={styles.scanCta}>
+                          <Feather name="refresh-cw" size={16} color={theme.color.onBrandPrimary} />
+                          <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Réessayer la caméra" : "Retry camera"}</Text>
+                        </Pressable>
+                      )}
                     </View>
                   )}
-                  {cameraReady && <View style={styles.scanFrame} />}
-                  {cameraReady && <Text style={styles.scanHint}>{lang === "fr" ? "Pointez vers le QR du client" : "Point at the customer's QR"}</Text>}
-                  <Pressable testID="stop-scan-btn" onPress={() => setScanning(false)} style={styles.stopScanBtn}>
-                    <Feather name="x" size={18} color={theme.color.onBrandPrimary} />
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.scanPlaceholder}>
-                  <Feather name="camera" size={40} color={theme.color.brand} />
-                  <Text style={styles.placeholderTxt}>
-                    {Platform.OS === "web"
-                      ? (lang === "fr" ? "Le scanner caméra n'est disponible que sur l'app mobile" : "QR scanner is only available on the mobile app")
-                      : permanentlyBlocked
-                        ? (lang === "fr" ? "Caméra bloquée. Activez l'accès dans les réglages." : "Camera blocked. Enable access in settings.")
-                        : (lang === "fr" ? "Scannez le QR de fidélité du client" : "Scan the customer's loyalty QR")}
-                  </Text>
-                  {Platform.OS !== "web" && !permanentlyBlocked && (
-                    <Pressable testID="start-scan-btn" onPress={startScan} style={styles.scanCta}>
-                      <Feather name="maximize" size={16} color={theme.color.onBrandPrimary} />
-                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir le scanner" : "Open scanner"}</Text>
-                    </Pressable>
-                  )}
-                  {Platform.OS !== "web" && permanentlyBlocked && (
-                    <Pressable testID="open-settings-btn" onPress={() => Linking.openSettings()} style={styles.scanCta}>
-                      <Feather name="settings" size={16} color={theme.color.onBrandPrimary} />
-                      <Text style={styles.scanCtaTxt}>{lang === "fr" ? "Ouvrir les réglages" : "Open settings"}</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
 
-              {/* Fallback only: manual search (QR unreadable). Hidden by default
-                  so the camera stays the primary, fastest workflow. */}
-              <Pressable
-                testID="toggle-manual-search"
-                onPress={() => setShowManualSearch((v) => !v)}
-                style={styles.fallbackToggle}
-              >
-                <Feather name={showManualSearch ? "chevron-up" : "search"} size={14} color={theme.color.muted} />
-                <Text style={styles.fallbackToggleTxt}>
-                  {lang === "fr" ? "QR illisible ? Recherche manuelle" : "Can't scan? Manual search"}
-                </Text>
-              </Pressable>
-
-              {showManualSearch && (
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: theme.space.lg }}>
-                <TextInput
-                  testID="search-input"
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  placeholder={lang === "fr" ? "Téléphone, nom ou QR" : "Phone, name or QR"}
-                  placeholderTextColor={theme.color.muted}
-                  value={searchInput}
-                  onChangeText={setSearchInput}
-                  autoCapitalize="none"
-                  returnKeyType="search"
-                  onSubmitEditing={onSearchPress}
-                  autoFocus
-                />
-                <Pressable
-                  testID="search-btn"
-                  onPress={onSearchPress}
-                  disabled={busy}
-                  style={styles.manualBtn}
-                >
-                  {busy ? <ActivityIndicator color={theme.color.onBrandPrimary} size="small" /> : <Feather name="search" size={18} color={theme.color.onBrandPrimary} />}
-                </Pressable>
-              </View>
-              )}
-
-              {searchResults.length > 0 && (
-                <View style={{ marginBottom: theme.space.lg }}>
-                  {searchResults.map((c: any) => (
-                    <Pressable
-                      key={c.user_id}
-                      testID={`search-result-${c.user_id}`}
-                      onPress={() => { setCustomer(c); setSearchResults([]); setSearchInput(""); setScanning(false); setPendingQty(1); }}
-                      style={styles.searchRow}
-                    >
-                      <View style={styles.avatar}><Text style={styles.avatarTxt}>{c.name?.[0]?.toUpperCase() || "?"}</Text></View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.customerName}>{c.name}</Text>
-                        <Text style={styles.customerEmail}>{c.phone || c.email || "—"} · {c.pizza_count} 🍕 · {c.available_rewards?.length || 0} 🎁</Text>
-                      </View>
-                      <Feather name="chevron-right" size={18} color={theme.color.brand} />
-                    </Pressable>
-                  ))}
-                  <Pressable testID="close-results-btn" onPress={() => setSearchResults([])} style={{ paddingVertical: 8 }}>
-                    <Text style={{ color: theme.color.muted, fontSize: 12, textAlign: "center" }}>
-                      {lang === "fr" ? "Fermer les résultats" : "Close results"}
+                  {/* Fallback only: manual search (QR unreadable). Hidden by default
+                      so the camera stays the primary, fastest workflow. */}
+                  <Pressable
+                    testID="toggle-manual-search"
+                    onPress={() => setShowManualSearch((v) => !v)}
+                    style={styles.fallbackToggle}
+                  >
+                    <Feather name={showManualSearch ? "chevron-up" : "search"} size={14} color={theme.color.muted} />
+                    <Text style={styles.fallbackToggleTxt}>
+                      {lang === "fr" ? "QR illisible ? Recherche manuelle" : "Can't scan? Manual search"}
                     </Text>
                   </Pressable>
-                </View>
-              )}
+
+                  {showManualSearch && (
+                    <View style={{ flexDirection: "row", gap: 8, marginBottom: theme.space.lg }}>
+                      <TextInput
+                        testID="search-input"
+                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                        placeholder={lang === "fr" ? "Téléphone, nom ou QR" : "Phone, name or QR"}
+                        placeholderTextColor={theme.color.muted}
+                        value={searchInput}
+                        onChangeText={setSearchInput}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                        onSubmitEditing={onSearchPress}
+                        autoFocus
+                      />
+                      <Pressable
+                        testID="search-btn"
+                        onPress={onSearchPress}
+                        disabled={busy}
+                        style={styles.manualBtn}
+                      >
+                        {busy ? <ActivityIndicator color={theme.color.onBrandPrimary} size="small" /> : <Feather name="search" size={18} color={theme.color.onBrandPrimary} />}
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {searchResults.length > 0 && (
+                    <View style={{ marginBottom: theme.space.lg }}>
+                      {searchResults.map((c: any) => (
+                        <Pressable
+                          key={c.user_id}
+                          testID={`search-result-${c.user_id}`}
+                          onPress={() => { setCustomer(c); setSearchResults([]); setSearchInput(""); setPendingQty(1); }}
+                          style={styles.searchRow}
+                        >
+                          <View style={styles.avatar}><Text style={styles.avatarTxt}>{c.name?.[0]?.toUpperCase() || "?"}</Text></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.customerName}>{c.name}</Text>
+                            <Text style={styles.customerEmail}>{c.phone || c.email || "—"} · {c.pizza_count} 🍕 · {c.available_rewards?.length || 0} 🎁</Text>
+                          </View>
+                          <Feather name="chevron-right" size={18} color={theme.color.brand} />
+                        </Pressable>
+                      ))}
+                      <Pressable testID="close-results-btn" onPress={() => setSearchResults([])} style={{ paddingVertical: 8 }}>
+                        <Text style={{ color: theme.color.muted, fontSize: 12, textAlign: "center" }}>
+                          {lang === "fr" ? "Fermer les résultats" : "Close results"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
                 </>
               )}
 
@@ -478,7 +417,7 @@ function AdminPanel() {
                 </View>
                 <Pressable
                   testID="clear-customer-btn"
-                  onPress={() => { setCustomer(null); setError(null); setPermissionRequested(false); lastScanRef.current = null; if (Platform.OS !== "web" && permission?.granted) setScanning(true); }}
+                  onPress={() => { setCustomer(null); setError(null); lastScanRef.current = null; }}
                   style={styles.iconBtn}
                 >
                   <Feather name="x" size={18} color={theme.color.onSurfaceTertiary} />
@@ -671,12 +610,12 @@ const styles = StyleSheet.create({
   cameraWrap: { width: "100%", height: 340, borderRadius: theme.radius.lg, overflow: "hidden", backgroundColor: "#000" },
   scanFrame: { position: "absolute", top: "18%", left: "12%", right: "12%", bottom: "22%", borderWidth: 2, borderColor: theme.color.brand, borderRadius: 12 },
   scanHint: { position: "absolute", bottom: 16, left: 0, right: 0, textAlign: "center", color: theme.color.onSurface, fontSize: 12, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 6 },
-  stopScanBtn: { position: "absolute", top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
-  manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   cameraLoading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#000" },
   cameraLoadingTxt: { color: theme.color.muted, fontSize: 12, fontWeight: "500" },
   fallbackToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: theme.space.lg, marginBottom: theme.space.sm },
   fallbackToggleTxt: { color: theme.color.muted, fontSize: 13, fontWeight: "500", textDecorationLine: "underline" },
+  manualBtn: { width: 54, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: theme.radius.md, backgroundColor: theme.color.surfaceSecondary, borderWidth: 1, borderColor: theme.color.border, marginBottom: 8 },
   customerHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: theme.space.lg },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   avatarTxt: { color: theme.color.onBrandPrimary, fontSize: 22, fontWeight: "700" },
@@ -711,7 +650,6 @@ const styles = StyleSheet.create({
   pizzaChipTxtActive: { color: theme.color.onBrandPrimary },
   secondaryBtn: { flex: 1, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.color.border, backgroundColor: theme.color.surfaceSecondary },
   secondaryTxt: { color: theme.color.brand, fontSize: 12, fontWeight: "600", letterSpacing: 0.8 },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: theme.radius.md, backgroundColor: theme.color.surfaceSecondary, borderWidth: 1, borderColor: theme.color.border, marginBottom: 8 },
   rewardRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: theme.space.md, borderBottomWidth: 0.5, borderBottomColor: theme.color.divider },
   rewardIcon: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: theme.color.brand, alignItems: "center", justifyContent: "center" },
   rewardIconActive: { backgroundColor: theme.color.brand },

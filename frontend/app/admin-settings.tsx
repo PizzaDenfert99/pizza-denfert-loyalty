@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, TextInput, Platform, KeyboardAvoidingView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, TextInput, Platform, KeyboardAvoidingView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { useI18n } from "@/src/i18n";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
 import { isLoyaltyApp } from "@/src/appMode";
+import { pickImageFromGallery } from "@/src/imagePicker";
 
 export default function AdminSettingsRoute() {
   if (!isLoyaltyApp()) return <Redirect href={"/" as any} />;
@@ -27,6 +28,12 @@ function AdminSettings() {
   const [err, setErr] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [heroUploading, setHeroUploading] = useState(false);
+  const [heroErr, setHeroErr] = useState<string | null>(null);
+  const [heroSavedAt, setHeroSavedAt] = useState<Date | null>(null);
+
   const load = useCallback(async () => {
     try {
       setErr(null);
@@ -40,9 +47,38 @@ function AdminSettings() {
     }
   }, [lang]);
 
+  const loadHero = useCallback(async () => {
+    try {
+      const s = await api.adminCmsGetSettings();
+      setSettingsId(s.id);
+      setHeroImageUrl(s.hero_image_url || null);
+    } catch {
+      // silent — the capacity card above already surfaces a load error if auth is the issue.
+    }
+  }, []);
+
   useEffect(() => {
-    if (user && user.is_admin) load();
-  }, [user, load]);
+    if (user && user.is_admin) { load(); loadHero(); }
+  }, [user, load, loadHero]);
+
+  const pickHeroImage = async () => {
+    const picked = await pickImageFromGallery();
+    if (!picked) return;
+    setHeroErr(null);
+    setHeroSavedAt(null);
+    setHeroUploading(true);
+    try {
+      const { url } = await api.adminCmsUploadImage("hero", picked, "original");
+      if (!settingsId) throw new Error("no settings row");
+      await api.adminCmsUpdateSettings(settingsId, { hero_image_url: url });
+      setHeroImageUrl(url);
+      setHeroSavedAt(new Date());
+    } catch (e: any) {
+      setHeroErr(lang === "fr" ? "Échec du téléversement, réessayez" : "Upload failed, retry");
+    } finally {
+      setHeroUploading(false);
+    }
+  };
 
   const save = async () => {
     setErr(null);
@@ -159,6 +195,34 @@ function AdminSettings() {
               </View>
             </View>
 
+            <View style={[styles.card, { marginTop: theme.space.md }]}>
+              <View style={styles.cardHead}>
+                <View style={styles.cardIcon}><Feather name="image" size={18} color={theme.color.brand} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardName}>{lang === "fr" ? "Image d'accueil" : "Home hero image"}</Text>
+                  <Text style={styles.cardSub}>{lang === "fr" ? "Photo affichée en haut de l'écran d'accueil client" : "Photo shown at the top of the customer home screen"}</Text>
+                </View>
+              </View>
+              {!!heroImageUrl && (
+                <Image source={{ uri: heroImageUrl }} style={styles.heroPreview} resizeMode="cover" />
+              )}
+              <Pressable testID="hero-image-pick-btn" onPress={pickHeroImage} disabled={heroUploading} style={styles.heroPickBtn}>
+                {heroUploading ? <ActivityIndicator color={theme.color.brand} /> : (
+                  <>
+                    <Feather name="upload" size={14} color={theme.color.brand} />
+                    <Text style={styles.heroPickTxt}>{heroImageUrl ? (lang === "fr" ? "Remplacer l'image" : "Replace image") : (lang === "fr" ? "Choisir une image" : "Choose image")}</Text>
+                  </>
+                )}
+              </Pressable>
+              {heroErr && <Text testID="hero-error" style={styles.err}>{heroErr}</Text>}
+              {heroSavedAt && !heroErr && (
+                <View testID="hero-saved" style={styles.savedBox}>
+                  <Feather name="check-circle" size={14} color={theme.color.success} />
+                  <Text style={styles.savedTxt}>{lang === "fr" ? "Image mise à jour" : "Image updated"}</Text>
+                </View>
+              )}
+            </View>
+
             {err && <Text testID="settings-error" style={styles.err}>{err}</Text>}
             {savedAt && !err && (
               <View testID="settings-saved" style={styles.savedBox}>
@@ -205,4 +269,7 @@ const styles = StyleSheet.create({
   savedTxt: { color: theme.color.success, fontSize: 12, fontWeight: "600", letterSpacing: 0.5 },
   submit: { flexDirection: "row", height: 54, borderRadius: theme.radius.md, backgroundColor: theme.color.brand, alignItems: "center", justifyContent: "center", marginTop: theme.space.xl },
   submitTxt: { color: theme.color.onBrandPrimary, fontSize: 14, fontWeight: "700", letterSpacing: 1 },
+  heroPreview: { width: "100%", height: 140, borderRadius: theme.radius.md, marginTop: theme.space.sm, marginBottom: theme.space.sm, backgroundColor: theme.color.surface },
+  heroPickBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.color.brand, backgroundColor: "rgba(212,175,55,0.06)" },
+  heroPickTxt: { color: theme.color.brand, fontSize: 13, fontWeight: "600" },
 });
