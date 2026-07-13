@@ -11,6 +11,7 @@ import { useAuth } from "@/src/auth-context";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
 import { pickImageFromGallery, PickedFile } from "@/src/imagePicker";
+import { ImageCropEditor } from "@/src/components/ImageCropEditor";
 import { isLoyaltyApp } from "@/src/appMode";
 
 // Menu editing is Supabase-backed (proxied by our own FastAPI admin/cms/* endpoints) —
@@ -192,6 +193,7 @@ function ItemEditor({ item, catIdByKey, itemsCount, onClose, onSaved, onToast }:
   // first; this keeps the tablet's existing single-button "pick then Enregistrer" flow.
   const [imagePreviewUri, setImagePreviewUri] = useState(item?.thumbnail_url || item?.image_url || "");
   const [pendingImage, setPendingImage] = useState<PickedFile | null>(null);
+  const [cropSource, setCropSource] = useState<PickedFile | null>(null);
   const [usePizzaSizes, setUsePizzaSizes] = useState(item?.prices ? ("26" in item.prices || "31" in item.prices) : false);
   const [price, setPrice] = useState(item?.prices?.default != null ? String(item.prices.default) : "");
   const [price26, setPrice26] = useState(item?.prices?.["26"] != null ? String(item.prices["26"]) : "");
@@ -204,11 +206,16 @@ function ItemEditor({ item, catIdByKey, itemsCount, onClose, onSaved, onToast }:
     try {
       const picked = await pickImageFromGallery();
       if (!picked) return;
-      setPendingImage(picked);
-      setImagePreviewUri(picked.uri);
+      setCropSource(picked);
     } catch (e: any) {
       onToast(e?.message || "Échec de l'image");
     } finally { setUploading(false); }
+  };
+
+  const handleCropConfirm = (file: PickedFile) => {
+    setCropSource(null);
+    setPendingImage(file);
+    setImagePreviewUri(file.uri);
   };
 
   const save = async () => {
@@ -340,6 +347,13 @@ function ItemEditor({ item, catIdByKey, itemsCount, onClose, onSaved, onToast }:
           </KeyboardAvoidingView>
         </View>
       </View>
+      <ImageCropEditor
+        visible={!!cropSource}
+        source={cropSource}
+        aspectRatio={16 / 9}
+        onCancel={() => setCropSource(null)}
+        onConfirm={handleCropConfirm}
+      />
     </Modal>
   );
 }

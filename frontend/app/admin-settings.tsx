@@ -9,7 +9,8 @@ import { useI18n } from "@/src/i18n";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
 import { isLoyaltyApp } from "@/src/appMode";
-import { pickImageFromGallery } from "@/src/imagePicker";
+import { pickImageFromGallery, PickedFile } from "@/src/imagePicker";
+import { ImageCropEditor } from "@/src/components/ImageCropEditor";
 
 export default function AdminSettingsRoute() {
   if (!isLoyaltyApp()) return <Redirect href={"/" as any} />;
@@ -48,6 +49,11 @@ function AdminSettings() {
   const [bgUploading, setBgUploading] = useState<Record<BgKey, boolean>>({ home: false, reservations: false, account: false, menu: false });
   const [bgErr, setBgErr] = useState<Record<BgKey, string | null>>({ home: null, reservations: null, account: null, menu: null });
   const [bgSavedAt, setBgSavedAt] = useState<Record<BgKey, Date | null>>({ home: null, reservations: null, account: null, menu: null });
+
+  // Crop step shared by the hero image and the 4 backgrounds — differ only
+  // in target aspect ratio and which upload path runs on confirm.
+  type CropTarget = { kind: "hero"; file: PickedFile } | { kind: "bg"; cfg: (typeof BG_FIELDS)[number]; file: PickedFile };
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -92,6 +98,10 @@ function AdminSettings() {
       return;
     }
     if (!picked) return;
+    setCropTarget({ kind: "hero", file: picked });
+  };
+
+  const uploadHeroImage = async (picked: PickedFile) => {
     setHeroErr(null);
     setHeroSavedAt(null);
     setHeroUploading(true);
@@ -132,6 +142,10 @@ function AdminSettings() {
       return;
     }
     if (!picked) return;
+    setCropTarget({ kind: "bg", cfg, file: picked });
+  };
+
+  const uploadBgImage = async (cfg: (typeof BG_FIELDS)[number], picked: PickedFile) => {
     setBgErr((s) => ({ ...s, [cfg.key]: null }));
     setBgSavedAt((s) => ({ ...s, [cfg.key]: null }));
     setBgUploading((s) => ({ ...s, [cfg.key]: true }));
@@ -160,6 +174,14 @@ function AdminSettings() {
     } finally {
       setBgUploading((s) => ({ ...s, [cfg.key]: false }));
     }
+  };
+
+  const handleCropConfirm = (file: PickedFile) => {
+    const target = cropTarget;
+    setCropTarget(null);
+    if (!target) return;
+    if (target.kind === "hero") uploadHeroImage(file);
+    else uploadBgImage(target.cfg, file);
   };
 
   const save = async () => {
@@ -368,6 +390,14 @@ function AdminSettings() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <ImageCropEditor
+        visible={!!cropTarget}
+        source={cropTarget?.file ?? null}
+        aspectRatio={cropTarget?.kind === "hero" ? 9 / 16 : 9 / 19.5}
+        lang={lang}
+        onCancel={() => setCropTarget(null)}
+        onConfirm={handleCropConfirm}
+      />
     </View>
   );
 }

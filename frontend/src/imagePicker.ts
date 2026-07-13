@@ -106,6 +106,19 @@ export async function pickImageFromGallery(opts?: {
 }
 
 /**
+ * Wrap a local file URI (e.g. the output of expo-image-manipulator's crop
+ * step) into the same PickedFile shape the rest of the CMS upload plumbing
+ * expects. Mirrors the fetch(uri).blob() pattern above — needed for the
+ * `blob` field (used on web / by admin-ads' FileReader) even though native
+ * uploads stream from `uri` directly.
+ */
+export async function pickedFileFromUri(uri: string, name: string, type: string): Promise<PickedFile> {
+  const resp = await fetch(uri);
+  const blob = await resp.blob();
+  return { name, type, size: blob.size, blob, uri };
+}
+
+/**
  * Optional: pick directly from the camera (snap a fresh photo) — Android & iOS only.
  * Kept here for completeness; the CMS UI calls it via a long-press / secondary button.
  */

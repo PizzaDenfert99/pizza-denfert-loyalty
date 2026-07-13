@@ -7,7 +7,8 @@ import { useAuth } from "@/src/auth-context";
 import { useI18n } from "@/src/i18n";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
-import { pickImageFromGallery } from "@/src/imagePicker";
+import { pickImageFromGallery, PickedFile } from "@/src/imagePicker";
+import { ImageCropEditor } from "@/src/components/ImageCropEditor";
 import { isLoyaltyApp } from "@/src/appMode";
 
 type Slide = { id: string; section: string; order: number; title: string; subtitle?: string;
@@ -170,6 +171,7 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
   const [imageUrl, setImageUrl] = useState(slide.image_url || "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cropSource, setCropSource] = useState<PickedFile | null>(null);
 
   // Per-slide style — all optional; empty string means "use kiosk default".
   const [backgroundColor, setBackgroundColor] = useState(slide.background_color || "");
@@ -180,6 +182,11 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
   const handlePick = async () => {
     const picked = await pickImageFromGallery();
     if (!picked) return;
+    setCropSource(picked);
+  };
+
+  const handleCropConfirm = async (file: PickedFile) => {
+    setCropSource(null);
     setUploading(true);
     try {
       // Store the image as a base64 data URL directly on the slide (self-contained,
@@ -188,7 +195,7 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
         reader.onerror = reject;
-        reader.readAsDataURL(picked.blob);
+        reader.readAsDataURL(file.blob);
       });
       setImageUrl(dataUrl);
       onToast(lang === "fr" ? "Image ajoutée" : "Image added");
@@ -294,6 +301,14 @@ function SlideEditor({ slide, lang, onClose, onSaved, onToast }: { slide: Slide;
           </Pressable>
         </ScrollView>
       </View>
+      <ImageCropEditor
+        visible={!!cropSource}
+        source={cropSource}
+        aspectRatio={4 / 3}
+        lang={lang}
+        onCancel={() => setCropSource(null)}
+        onConfirm={handleCropConfirm}
+      />
     </View>
   );
 }
